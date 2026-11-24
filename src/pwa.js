@@ -7,9 +7,9 @@ const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.p
 function installBanner() {
   if (!IS_PWA || isStandalone() || S.asked.install) return '';
   const ios = isIOS();
-  return `<div class="banner blue mt16"><div class="grow"><b>홈 화면에 설치하면 진짜 앱처럼 써</b>
-    <p>${ios ? 'Safari 아래쪽 공유 버튼 → "홈 화면에 추가" → 추가. 그다음부터는 꼭 홈 화면 아이콘으로 열어. Safari에서 연 기록과 아이콘으로 연 기록은 따로 저장돼.' : INSTALL_EVT ? '아래 버튼을 누르면 바로 설치돼.' : '브라우저 메뉴(⋮) → "앱 설치" 또는 "홈 화면에 추가".'}</p>
-    <div class="hstack mt12">${!ios && INSTALL_EVT ? '<button class="btn sm" data-act="install">설치하기</button>' : ''}<button class="btn sm grey" data-act="hideInstall">나중에</button></div></div></div>`;
+  return `<div class="notice info"><b>홈 화면에 설치해 두세요</b>
+    <p>${ios ? 'Safari 아래쪽 공유 버튼을 누르고 홈 화면에 추가를 골라요. 그다음부터는 홈 화면 아이콘으로 열어야 기록이 이어져요.' : INSTALL_EVT ? '설치하면 앱처럼 바로 열려요.' : 'Chrome 오른쪽 위 메뉴에서 앱 설치나 홈 화면에 추가를 골라요.'}</p>
+    <div class="hstack mt8">${!ios && INSTALL_EVT ? '<button class="btn sm" data-act="install">설치하기</button>' : ''}<button class="btn sm grey" data-act="hideInstall">나중에</button></div></div>`;
 }
 function downloadFile(name, text, type) {
   const blob = new Blob([text], {type});
@@ -29,14 +29,6 @@ function icsFold(line) {
   out.push(cur);
   return out.join('\r\n');
 }
-function setDesc(i, n) {
-  const d = DAYS[i];
-  if (d.test) return n === 1 ? `${d.test === 6 ? '최종' : d.test + '주차'} 테스트` : n === 2 ? (d.talk ? '하루토랑 대화' : '발음 구별 연습') : '카드 복습 + 보지 않고 적기';
-  if (d.last) return n === 1 ? '핵심 30문장' : n === 2 ? '출국 체크리스트' : '카드 복습';
-  if (n === 1) return (d.s1 && d.s1.txt) || d.t;
-  if (n === 2) return d.s2 && d.s2.ph ? '표현: ' + d.s2.ph.map(id => PH_BY[id].ko).join(' / ') : d.s2 && d.s2.rp ? '롤플레이' : '듣기·말하기';
-  return '카드 복습 12분 + 보지 않고 적기 5분 + 틀린 것 3분';
-}
 function makeICS(times) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
   const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//nihongo6//KO', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:일본어 6주', 'X-WR-TIMEZONE:Asia/Seoul',
@@ -49,10 +41,10 @@ function makeICS(times) {
       const st = `${date}T${pad(hh)}${pad(mm)}00`;
       const enDate = end >= 1440 ? addDays(dateOfIdx(i), 1).replace(/-/g, '') : date;
       const en = `${enDate}T${pad(Math.floor(end % 1440 / 60))}${pad(end % 60)}00`;
-      const title = `일본어 ${SET_NAME[n]} (Day ${i + 1})`;
+      const info = setInfo(i, n);
       L.push('BEGIN:VEVENT', `UID:nihongo6-${date}-${n}@nihongo6`, `DTSTAMP:${stamp}`, `DTSTART;TZID=Asia/Seoul:${st}`, `DTEND;TZID=Asia/Seoul:${en}`,
-        icsFold('SUMMARY:' + icsEscape(title)), icsFold('DESCRIPTION:' + icsEscape(setDesc(i, n) + '\n앱에서 시작 → 20분 타이머')),
-        'BEGIN:VALARM', 'ACTION:DISPLAY', icsFold('DESCRIPTION:' + icsEscape(`${SET_NAME[n]} 시간. 20분만!`)), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT');
+        icsFold('SUMMARY:' + icsEscape(`일본어 세트 ${n} · ${info.name}`)), icsFold('DESCRIPTION:' + icsEscape(`${i + 1}일째 · ${d.t}\n앱을 열고 오늘 동그라미를 누르면 시작돼요.`)),
+        'BEGIN:VALARM', 'ACTION:DISPLAY', icsFold('DESCRIPTION:' + icsEscape(`일본어 세트 ${n} 시간이에요. 20분이면 돼요.`)), 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT');
     });
   });
   L.push('END:VCALENDAR');
@@ -69,24 +61,23 @@ Object.assign(ACT, {
   ics: () => {
     downloadFile('nihongo6-alarms.ics', makeICS(S.settings.times), 'text/calendar');
     openSheet(b => {
-      b.innerHTML = `<h2>캘린더 알림 파일</h2><p class="muted small">방금 받은 파일을 열고 "모두 추가"를 누르면 129개 세트 일정이 알림과 함께 들어가.</p>
-        <div class="card small mt12"><b>아이폰</b><br>파일이 바로 안 열리면 공유 → "캘린더"로 열거나, 파일 앱에서 nihongo6-alarms.ics를 눌러.</div>
-        <div class="card small mt8"><b>안드로이드</b><br>다운로드 알림에서 파일을 열고 Google 캘린더로 가져오기.</div>
-        ${S.settings.times.join() === '10:00,16:00,22:30' ? `<a class="btn soft mt12" href="calendar.ics">기본 시간 파일로 열기</a>` : ''}
-        <button class="btn mt12" data-ok>확인</button>`;
+      b.innerHTML = `<h2>캘린더 알림 파일</h2><p class="muted small">세트 129개가 알림과 함께 들어 있는 파일을 받았어요.</p>
+        <div class="card small mt12"><b>갤럭시</b><br>삼성 캘린더는 이 파일을 직접 못 열어요. 컴퓨터에서 Google 캘린더 웹을 열고 설정, 가져오기 및 내보내기로 들어가 파일을 올리면 폰 캘린더에도 들어와요.</div>
+        <div class="card small mt8"><b>아이폰</b><br>파일 앱에서 nihongo6-alarms.ics를 누르고 모두 추가를 골라요.</div>
+        <button class="btn mt16" data-ok>확인</button>`;
       $('[data-ok]', b).addEventListener('click', () => closeSheet());
     });
   },
-  backupFile: () => { downloadFile(`nihongo6-backup-${today()}.json`, JSON.stringify(S), 'application/json'); toast('백업 파일을 저장했어'); }
+  backupFile: () => { downloadFile(`nihongo6-backup-${today()}.json`, JSON.stringify(S), 'application/json'); toast('백업 파일을 저장했어요'); }
 });
 function initPWA() {
-  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; if (S.tab === 'today' && !PAGES.length) render(); });
-  window.addEventListener('appinstalled', () => { S.asked.install = 1; save(); render(); });
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; if (S.tab === 'learn' && !PAGES.length && !LESSON) render(); });
+  window.addEventListener('appinstalled', () => { S.asked.install = 1; save(); if (!LESSON) render(); });
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     navigator.serviceWorker.register('sw.js').then(reg => {
       reg.addEventListener('updatefound', () => {
         const w = reg.installing;
-        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) toast('새 버전이 준비됐어. 앱을 껐다 켜면 적용돼'); });
+        if (w) w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) toast('새 버전이 준비됐어요. 앱을 껐다 켜면 바뀌어요'); });
       });
     }).catch(() => {});
   }

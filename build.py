@@ -2,7 +2,7 @@ import pathlib, json, shutil
 root = pathlib.Path(__file__).parent
 src = root / 'src'
 css = (src / 'style.css').read_text()
-FILES = ['data.js', 'core.js', 'engines.js', 'views.js', 'pwa.js', 'boot.js']
+FILES = ['data.js', 'core.js', 'lesson.js', 'checkin.js', 'views.js', 'pwa.js', 'boot.js']
 js = '\n'.join((src / f).read_text() for f in FILES)
 
 def page(pwa: bool) -> str:
@@ -52,7 +52,7 @@ if pw.exists(): shutil.rmtree(pw)
 (pw / 'index.html').write_text(page(True))
 for f in (root / 'assets' / 'icons').iterdir(): shutil.copy(f, pw / 'icons' / f.name)
 manifest = {
-  "name": "일본어 6주", "short_name": "일본어 6주", "description": "일본 한달살이 전 6주 일본어 플랜: 세트 타이머, 가나, 회화, 간격 반복 카드, 08년생 말투",
+  "name": "일본어 6주", "short_name": "일본어 6주", "description": "일본 한달살이 전 6주 일본어. 하루 세 번 짧은 레슨, 회화 연습, 복습 카드",
   "lang": "ko", "start_url": "./", "scope": "./", "id": "./", "display": "standalone", "orientation": "portrait",
   "background_color": "#F2F2F7", "theme_color": "#F2F2F7",
   "icons": [
