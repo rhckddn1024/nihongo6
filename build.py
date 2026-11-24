@@ -72,7 +72,8 @@ self.addEventListener('activate', e => {
 });
 self.addEventListener('fetch', e => {
   const r = e.request;
-  if (r.method !== 'GET' || new URL(r.url).origin !== location.origin) return;
+  const u = new URL(r.url);
+  if (r.method !== 'GET' || u.origin !== location.origin || u.pathname.startsWith('/.netlify/')) return;
   e.respondWith(caches.match(r, {ignoreSearch: true}).then(hit => {
     const net = fetch(r).then(res => {
       if (res && res.ok) { const cp = res.clone(); caches.open(CACHE).then(c => c.put(r, cp)); }
