@@ -1,6 +1,10 @@
 /* ---------- boot ---------- */
 (function boot() {
   const h = location.hash.slice(1);
+  if (h.startsWith('ws=day-')) {
+    const i = +h.slice(7) - 1;
+    if (i >= 0 && i < DAYS.length) { document.documentElement.classList.add('wsmode'); appEl.innerHTML = wsHTML(worksheetFor(i)); return; }
+  }
   S.tab = TABS.some(t => t[0] === h) ? h : 'learn';
   render();
   setInterval(globalTick, 1000);

@@ -1,4 +1,4 @@
-const CACHE = 'nihongo6-20261124203844';
+const CACHE = 'nihongo6-20261125084034';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './calendar.ics', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png', './icons/maskable-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));

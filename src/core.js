@@ -46,6 +46,7 @@ const IC = {
   plus: I('<path d="M12 5v14M5 12h14" stroke-width="2.2"/>'),
   flame: I('<path d="M12 21.5c-4.1 0-7-2.8-7-6.6 0-3.6 2.5-5.6 4-7.8.3 1.7 1.1 2.8 2.1 3.3.2-3 1.3-5.4 3.4-7.9.3 3.4 4.5 5.9 4.5 11.4 0 4.6-2.9 7.6-7 7.6z" fill="currentColor" stroke="none"/>'),
   bolt: I('<path d="M13 2.5L5 13.5h6l-1 8 8-11h-6z" fill="currentColor" stroke="none"/>'),
+  mic: I('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>'),
   plane: I('<path d="M21 15.5l-8-4.5V5a1.5 1.5 0 0 0-3 0v6l-7 4.5V17l7-2v4l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-4l8 2z" fill="currentColor" stroke="none"/>'),
   timer: I('<circle cx="12" cy="13.5" r="7"/><path d="M12 13.5V9.5M9.5 2.5h5"/>'),
   sparkle: I('<path d="M12 3.5l1.8 5.2 5.2 1.8-5.2 1.8L12 17.5l-1.8-5.2L5 10.5l5.2-1.8z" fill="currentColor" stroke="none"/>'),
@@ -65,6 +66,7 @@ const IC = {
   trophy: I('<path d="M7.5 4h9v5a4.5 4.5 0 0 1-9 0z"/><path d="M7.5 6H4.5v1.5A3 3 0 0 0 7.6 10.5M16.5 6h3v1.5a3 3 0 0 1-3.1 3M12 13.5V17M8.5 20h7M9.5 17h5v3h-5z"/>'),
   lock: I('<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
   flag: I('<path d="M5.5 21V4M5.5 4.5h11l-2 4 2 4h-11"/>'),
+  redo: I('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4v4.5h4.5"/>'),
   cal: I('<rect x="4" y="5.5" width="16" height="14.5" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/>'),
   gear: I('<circle cx="12" cy="12" r="3"/><path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3L5.5 5.5"/>')
 };
@@ -164,7 +166,7 @@ function hangulMode() {
   const m = S.settings.hangul;
   if (m !== 'auto') return m;
   const w = weekNow();
-  return w <= 2 ? 'show' : w === 3 ? 'tap' : 'hide';
+  return w <= 2 ? 'tap' : 'hide';
 }
 const setRec = (date, n) => (S.sets[date] || {})[n] || null;
 const setStat = (date, n) => (setRec(date, n) || {}).st || '';
@@ -178,16 +180,17 @@ function dayItems(i) {
 }
 function unlockItems(ids) {
   let n = 0;
-  ids.forEach(id => { if (!S.cards[id] && cardExists(id)) { S.cards[id] = {b: 1, due: today(), n: 0, w: 0}; n++; } });
+  ids.forEach(id => { if (!S.cards[id] && cardExists(id)) { S.cards[id] = {b: 0, due: today(), n: 0, w: 0}; n++; } });
   return n;
 }
-function addCard(id) { if (!S.cards[id]) { S.cards[id] = {b: 1, due: today(), n: 0, w: 0}; save(); return true; } return false; }
-const BOX_DAYS = [0, 1, 3, 7, 14, 30];
+function addCard(id) { if (!S.cards[id]) { S.cards[id] = {b: 0, due: today(), n: 0, w: 0}; save(); return true; } return false; }
+/* first seen today → same day → next day → 3 days → 1 week → 2 weeks → a month → done */
+const BOX_DAYS = [0, 1, 3, 7, 14, 30, 45];
 function grade(id, r) {
-  const c = S.cards[id] || (S.cards[id] = {b: 1, due: today(), n: 0, w: 0});
+  const c = S.cards[id] || (S.cards[id] = {b: 0, due: today(), n: 0, w: 0});
   c.n++;
-  if (r === 'wrong') { c.b = 1; c.w++; c.due = addDays(today(), 1); }
-  else { c.b = Math.min(c.b + 1, 6); c.due = c.b >= 6 ? addDays(today(), 45) : addDays(today(), BOX_DAYS[c.b]); }
+  if (r === 'wrong') { c.b = 0; c.w++; c.lw = today(); c.due = addDays(today(), 1); }
+  else { c.b = Math.min(c.b + 1, 6); c.due = addDays(today(), BOX_DAYS[c.b]); }
   c.last = today();
 }
 function cardExists(id) {
@@ -209,7 +212,7 @@ const weakKana = pool => pool.filter(k => { const s = S.kanaStat[k]; return s &&
 /* ---------- XP & streak ---------- */
 const xpOn = d => S.xp[d] || 0;
 const totalXP = () => Object.values(S.xp).reduce((a, b) => a + b, 0);
-const activeOn = d => xpOn(d) > 0 || [1, 2, 3].some(n => setStat(d, n) === 'done');
+const activeOn = d => [1, 2, 3].some(n => setStat(d, n) === 'done');
 function streak() {
   let d = today(), n = 0;
   if (!activeOn(d)) d = addDays(d, -1);
@@ -297,10 +300,12 @@ function loadVoices() {
 }
 if ('speechSynthesis' in window) { loadVoices(); try { speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {} }
 const jaVoices = () => VOICES.filter(v => /^ja/i.test(v.lang));
+const VOICE_MISSING = () => 'speechSynthesis' in window && VOICES.length > 0 && !jaVoices().length && !CTTS;
 function speak(text, opt = {}) {
   const t = ttsText(text);
   if (!t.trim()) return Promise.resolve();
-  const rate = opt.rate || S.settings.rate;
+  let rate = opt.rate || S.settings.rate, vv = null;
+  if (opt.vary) { rate = rate * [0.85, 1, 1.12][Math.floor(Math.random() * 3)]; const js = jaVoices(); if (js.length > 1) vv = js[Math.floor(Math.random() * js.length)]; }
   return new Promise(res => {
     const est = 700 + t.length * 260 / rate;
     let done = false; const fin = () => { if (!done) { done = true; res(); } };
@@ -309,7 +314,7 @@ function speak(text, opt = {}) {
         speechSynthesis.cancel();
         const u = new SpeechSynthesisUtterance(t);
         u.lang = 'ja-JP'; u.rate = rate;
-        let v = JA;
+        let v = vv || JA;
         if (opt.male) { const m = jaVoices().find(x => /Otoya|Hattori|Ichiro|Keita|Daichi|Naoki|Male/i.test(x.name)); if (m) v = m; }
         if (v) u.voice = v;
         u.onend = fin; u.onerror = fin;

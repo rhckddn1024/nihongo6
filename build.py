@@ -2,7 +2,7 @@ import pathlib, json, shutil
 root = pathlib.Path(__file__).parent
 src = root / 'src'
 css = (src / 'style.css').read_text()
-FILES = ['data.js', 'core.js', 'lesson.js', 'checkin.js', 'views.js', 'pwa.js', 'boot.js']
+FILES = ['data.js', 'strokes.js', 'core.js', 'lesson.js', 'runner.js', 'worksheet.js', 'checkin.js', 'views.js', 'pwa.js', 'boot.js']
 js = '\n'.join((src / f).read_text() for f in FILES)
 
 def page(pwa: bool) -> str:
@@ -47,6 +47,10 @@ out = root / 'dist'; out.mkdir(exist_ok=True)
 
 pw = root / 'app'
 keep = {n: (pw / n).read_bytes() for n in ['README-ko.txt', 'calendar.ics'] if (pw / n).exists()}
+pdfs = root / '.pdf-keep'
+if (pw / 'pdf').exists():
+    if pdfs.exists(): shutil.rmtree(pdfs)
+    shutil.move(str(pw / 'pdf'), str(pdfs))
 if pw.exists(): shutil.rmtree(pw)
 (pw / 'icons').mkdir(parents=True)
 (pw / 'index.html').write_text(page(True))
@@ -84,6 +88,7 @@ self.addEventListener('fetch', e => {
 });
 ''')
 for n, data in keep.items(): (pw / n).write_bytes(data)
+if pdfs.exists(): shutil.move(str(pdfs), str(pw / 'pdf'))
 import time
 sw=(pw / 'sw.js').read_text().replace('__STAMP__', time.strftime('%Y%m%d%H%M%S'))
 (pw / 'sw.js').write_text(sw)

@@ -70,6 +70,7 @@ function vLearn(el) {
   </header>`;
   if (t < START) h += `<div class="notice"><b>${diffDays(t, START) === 1 ? '내일' : fmtDate(START).replace(/ \S+요일$/, '')}부터 시작해요</b><p>첫날 레슨은 지금 미리 해 봐도 돼요.</p></div>`;
   h += installBanner();
+  if (VOICE_MISSING()) h += `<div class="notice warn"><b>이 폰에서 일본어 음성을 못 찾았어요</b><p>설정에서 "텍스트 음성 변환"을 검색해 Google 엔진과 일본어 음성 데이터를 받아 주세요. 나 탭의 소리 테스트로 확인할 수 있어요.</p></div>`;
   const missed = missedSets();
   if (missed.length) h += `<button class="notice warn" data-act="node" data-d="${missed[0].date}" data-n="${missed[0].n}"><b>밀린 세트가 ${missed.length}개 있어요</b><p>${fmtDate(missed[0].date)} 세트 ${missed[0].n}부터 해요</p>${IC.chev}</button>`;
   let gi = 0;
@@ -83,7 +84,7 @@ function vLearn(el) {
       [1, 2, 3].forEach(n => {
         const info = setInfo(i, n), s = nodeState(date, n, cur, until);
         const icon = s === 'done' ? IC.check : s === 'locked' ? IC.lock : IC[info.icon];
-        h += `<div class="nwrap" style="--x:${ZIG[gi++ % 8]}px">${s === 'current' ? '<span class="nstart">시작</span>' : ''}<button class="node s-${s}" data-act="node" data-d="${date}" data-n="${n}" aria-label="${fmtDate(date)} 세트 ${n}, ${esc(info.name)}, ${STATE_LABEL[s]}"><span class="nc">${icon}</span></button><span class="ncap">${esc(info.short)}</span></div>`;
+        h += `<div class="nwrap" style="--x:${ZIG[gi++ % 8]}px">${s === 'current' ? '<span class="nstart">시작</span>' : ''}<button class="node s-${s}" data-act="node" data-d="${date}" data-n="${n}" aria-label="${fmtDate(date)} 세트 ${n}, ${esc(info.name)}, ${STATE_LABEL[s]}"><span class="nc">${icon}</span></button><span class="ncap"><em>${S.settings.times[n - 1]}</em> ${esc(info.short)}</span></div>`;
       });
       h += '</div>';
     });
@@ -107,7 +108,6 @@ function openSetSheet(date, n) {
   const i = dayIdx(date), d = DAYS[i];
   if (!d) return;
   const info = setInfo(i, n), rec = setRec(date, n), locked = date > openUntil();
-  const bp = n === 1 && info.kind === 's1' ? bookPart(i) : null;
   const rows = setContents(i, n);
   openSheet(b => {
     b.innerHTML = `<div class="sshead" style="--c:${UNIT_COL[d.w]}"><span class="snode">${IC[info.icon]}</span><div><p class="tiny">${fmtDate(date)} · 세트 ${n} · ${S.settings.times[n - 1]}</p><h2>${esc(info.name)}</h2></div></div>
@@ -116,10 +116,8 @@ function openSetSheet(date, n) {
       ${rec && rec.st === 'done' ? `<p class="chip ok">${IC.check} 완료${rec.acc != null ? ` · 정확도 ${rec.acc}%` : ''}</p>` : rec && rec.st ? `<p class="chip warn">${rec.st === 'part' ? '반만 했어요' : '못 했어요'}${rec.why ? ' · ' + esc(reasonLabel(rec.why)) : ''}</p>` : ''}
       <div class="stack mt16">
         ${locked ? `<button class="btn" disabled>${fmtShort(date)}에 열려요</button>` : `<button class="btn" data-go>${rec && rec.st === 'done' ? '다시 하기' : info.kind === 'test' ? '테스트 시작' : '레슨 시작'}</button>`}
-        ${bp && !locked ? `<button class="btn soft" data-timer>${IC.timer} 교재 읽기 20분 타이머</button>` : ''}
       </div>`;
     const go = $('[data-go]', b); if (go) go.addEventListener('click', () => { closeSheet(true); startSet(date, n); });
-    const tm = $('[data-timer]', b); if (tm) tm.addEventListener('click', () => { closeSheet(true); if (S.run) { openFocus(); return; } startRun(date, n, 20); });
   });
 }
 
@@ -153,6 +151,8 @@ function vPractice(el) {
     </div>
     <p class="sh">내 기록</p><div class="list">
       ${rowHTML({act: 'recall', icon: iconTile('pen', COL.indigo), title: '떠올려 적기', sub: '오늘 배운 걸 안 보고 적어 봐요'})}
+      ${rowHTML({act: 'wrongNote', icon: iconTile('flag', COL.red), title: '오답 노트', sub: '자주 틀린 것만 모아서', value: String(Object.keys(S.cards).filter(id => cardExists(id) && S.cards[id].w > 0).length)})}
+      ${rowHTML({act: 'worksheets', icon: iconTile('doc', COL.gray), title: '숙제 시트', sub: '날짜별로 손으로 쓰는 PDF'})}
       ${rowHTML({act: 'memo', icon: iconTile('plus', COL.green), title: '카드 직접 만들기', sub: '교재 단어나 현지에서 들은 말'})}
       ${rowHTML({act: 'allCards', icon: iconTile('review', COL.cyan), title: '전체 카드', value: String(total)})}
       ${rowHTML({act: 'book', icon: iconTile('book', COL.orange), title: '교재 진도', value: `${Object.values(S.book).filter(Boolean).length}/19`})}
@@ -341,7 +341,25 @@ function pAllCards() {
   pushPage('전체 카드', el => {
     const ids = Object.keys(S.cards).filter(cardExists).sort((a, b) => S.cards[a].due.localeCompare(S.cards[b].due));
     const label = id => { const t = id[0], v = id.slice(2); if (t === 'k') return `<span lang="ja">${v}</span> · ${esc(KANA_INFO[v].hg)}`; if (t === 'p') return `<span lang="ja">${esc(clean(PH_BY[v].k))}</span>`; if (t === 's') return `<span lang="ja">${SIGNS[+v][0]}</span> · ${esc(SIGNS[+v][2])}`; const c = S.custom.find(x => x.id === v); return `<span lang="ja">${esc(c.jp)}</span> · ${esc(c.ko)}`; };
-    el.innerHTML = `<h1 class="large">전체 카드</h1><p class="subtitle">${ids.length}장 · 다음에 볼 날짜 순서</p><div class="list">${ids.map(id => `<div class="row"><span class="t"><b>${label(id)}</b><small>${S.cards[id].b >= 6 ? '다 외움' : S.cards[id].b + '단계'} · 틀린 횟수 ${S.cards[id].w}</small></span><span class="v small">${fmtShort(S.cards[id].due)}</span></div>`).join('') || '<div class="empty-state">아직 카드가 없어요. 레슨을 하면 쌓여요.</div>'}</div>`;
+    el.innerHTML = `<h1 class="large">전체 카드</h1><p class="subtitle">${ids.length}장 · 다음에 볼 날짜 순서</p><div class="list">${ids.map(id => `<div class="row"><span class="t"><b>${label(id)}</b><small>${S.cards[id].b >= 6 ? '다 외움' : S.cards[id].b ? S.cards[id].b + '단계' : '새 카드'} · 틀린 횟수 ${S.cards[id].w}</small></span><span class="v small">${fmtShort(S.cards[id].due)}</span></div>`).join('') || '<div class="empty-state">아직 카드가 없어요. 레슨을 하면 쌓여요.</div>'}</div>`;
+  });
+}
+function pWrongNote() {
+  const label = id => { const t = id[0], v = id.slice(2); if (t === 'k') return `<span lang="ja">${v}</span> · ${esc(KANA_INFO[v].hg)}`; if (t === 'p') return `<span lang="ja">${esc(clean(PH_BY[v].k))}</span> · ${esc(PH_BY[v].ko)}`; if (t === 's') return `<span lang="ja">${SIGNS[+v][0]}</span> · ${esc(SIGNS[+v][2])}`; const c = S.custom.find(x => x.id === v); return c ? `<span lang="ja">${esc(c.jp)}</span> · ${esc(c.ko)}` : esc(id); };
+  pushPage('오답 노트', el => {
+    const ids = Object.keys(S.cards).filter(id => cardExists(id) && S.cards[id].w > 0).sort((a, b) => S.cards[b].w - S.cards[a].w || String(S.cards[b].lw || '').localeCompare(String(S.cards[a].lw || '')));
+    el.innerHTML = `<h1 class="large">오답 노트</h1><p class="subtitle">틀린 횟수가 많은 순서예요. 맞히기 시작하면 다음 복습 날짜가 뒤로 밀려요.</p>
+      ${ids.length ? `<div class="stack"><button class="btn" data-go>오답만 연습</button><button class="btn soft" data-print>종이로 뽑기</button></div>
+      <div class="list mt16">${ids.map(id => `<div class="row"><span class="t"><b>${label(id)}</b><small>${S.cards[id].w}번 틀림${S.cards[id].lw ? ' · 마지막 ' + fmtShort(S.cards[id].lw) : ''}</small></span><span class="v small">${fmtShort(S.cards[id].due)}</span></div>`).join('')}</div>` : '<div class="empty-state">아직 틀린 게 없어요</div>'}`;
+    const go = $('[data-go]', el); if (go) go.addEventListener('click', () => runLesson({title: '오답 노트', items: stamp(ids.slice(0, 20).map(recallItem), 'review'), srs: true}));
+    const pr = $('[data-print]', el); if (pr) pr.addEventListener('click', () => {
+      const kana = ids.filter(id => id[0] === 'k').slice(0, 20), ph = ids.filter(id => id[0] === 'p' && PH_BY[id.slice(2)].w !== 'staff').slice(0, 12);
+      const sec = [];
+      if (kana.length) sec.push({kind: 'write', title: '한글 발음 보고 가나 쓰기', items: kana.map(id => ({ko: KANA_INFO[id.slice(2)].hg, ans: id.slice(2)}))});
+      if (ph.length) sec.push({kind: 'write', title: '한국어 보고 일본어로 쓰기', items: ph.map(id => ({ko: PH_BY[id.slice(2)].ko, ans: clean(PH_BY[id.slice(2)].k)}))});
+      sec.push({kind: 'recall', title: '다시 틀리지 않으려면', note: '헷갈린 이유를 한 줄씩 적어 둬요.'});
+      printWorksheet({title: '오답 노트', date: today(), sec, answers: sec.filter(x => x.kind === 'write').map(x => ({title: x.title, items: x.items.map(y => y.ans)}))});
+    });
   });
 }
 function pBook() {
@@ -516,7 +534,7 @@ function vMe(el) {
     <p class="sh">최근 7일</p>
     <div class="card">${days7.some(xpOn) ? '' : '<p class="tiny center" style="margin:0 0 8px">이번 주는 아직 기록이 없어요</p>'}<div class="week7">${days7.map(d => `<div class="wcol ${d === t ? 'now' : ''}"><span class="wv">${xpOn(d) || ''}</span><i style="height:${Math.round(xpOn(d) / maxXP * 100)}%"></i><span class="wd">${WD[parseYmd(d).getDay()]}</span></div>`).join('')}</div></div>
     <p class="sh">주간 테스트</p>
-    <div class="list">${[1, 2, 3, 4, 5, 6].map(w => { const r = S.tests[w]; return rowHTML({title: w === 6 ? '최종 테스트' : `${w}주차`, sub: r ? esc(r.detail || '') : esc(TEST_RULE[w]), value: r ? `<span class="${r.pass ? 'ok-t' : 'no-t'}">${r.pass ? '통과' : '다시'} ${r.score}%</span>` : '—'}); }).join('')}</div>
+    <div class="list">${[1, 2, 3, 4, 5, 6].map(w => { const r = S.tests[w]; return rowHTML({title: w === 6 ? '최종 테스트' : `${w}주차`, sub: r ? esc(r.detail || '') : esc(TEST_RULE[w]), value: r ? `<span class="${r.pass ? 'ok-t' : 'no-t'}">${r.pass ? '통과' : '다시'} ${r.score}%</span>` : '아직'}); }).join('')}</div>
     ${reasons.length ? `<p class="sh">못 한 이유</p><div class="list">${reasons.map(([r, n]) => rowHTML({act: 'log', data: {why: r[0]}, title: esc(r[1]), value: `${n}번`})).join('')}</div><p class="sf">같은 이유가 세 번 넘게 나오면 그 시간대를 바꾸는 게 맞아요.</p>` : ''}
     <p class="sh">세트 시간</p>
     <div class="list">${[1, 2, 3].map(n => `<div class="row"><span class="t"><b>세트 ${n}</b><small>${['교재와 글자', '듣기와 말하기', '복습'][n - 1]}</small></span><input type="time" class="field tfield" data-time="${n - 1}" value="${S.settings.times[n - 1]}" aria-label="세트 ${n} 시간"></div>`).join('')}</div>
@@ -532,6 +550,7 @@ function vMe(el) {
     ${voices.length ? '' : '<p class="sf">일본어 음성이 안 나오면 폰 설정의 텍스트 음성 변환에서 Google 음성 엔진과 일본어 음성 데이터를 받아 주세요.</p>'}
     <p class="sh">참고</p>
     <div class="list">
+      ${rowHTML({act: 'soundTest', icon: iconTile('spk', COL.cyan), title: '소리 테스트', sub: JA ? esc(JA.name) : '일본어 목소리를 확인해요'})}
       ${rowHTML({act: 'week', data: {w: weekNow() > 6 ? 6 : weekNow()}, icon: iconTile('cal', COL.blue), title: '주차별 일정'})}
       <a class="row ic" href="${DOC_URL}" target="_blank" rel="noopener">${iconTile('doc', COL.indigo)}<span class="t"><b>커리큘럼 문서</b><small>공부 순서를 이렇게 정한 이유와 근거</small></span>${IC.chev}</a>
       ${rowHTML({act: 'depart', icon: iconTile('list', COL.green), title: '출국 체크리스트', value: `${Object.values(S.check).filter(Boolean).length}/${DEPART_CHECK.length}`})}
@@ -565,6 +584,10 @@ const ACT = {
   week: d => pWeek(+d.w),
   goDay: d => { closeAllPages(); S.tab = 'learn'; render(); const el = document.getElementById('day-' + d.d); if (el) el.scrollIntoView({block: 'start'}); window.scrollBy(0, -140); },
   reviewLesson: () => { const items = reviewItems(); if (!items.length) { toast('아직 복습할 카드가 없어요'); return; } runLesson({title: '복습', items, srs: true}); },
+  wrongNote: () => pWrongNote(),
+  worksheets: () => pWorksheets(),
+  hw: d => pHomework(+d.i),
+  soundTest: () => { speak('こんにちは。にほんごの おんせいです。'); toast(JA ? `${JA.name}로 읽고 있어요` : '소리가 안 들리면 미디어 볼륨과 음성 엔진을 확인해요'); },
   kana: d => pKana(d.set),
   kanaInfo: d => kanaSheet(d.k),
   kq: d => {
@@ -607,7 +630,6 @@ const ACT = {
   },
   allergen: d => { S.allergen = S.allergen || []; const k = S.allergen.indexOf(d.a); if (k >= 0) S.allergen.splice(k, 1); else S.allergen.push(d.a); save(); topPage().render(); },
   log: d => pLog(d.why),
-  openFocus: () => openFocus(),
   set: d => { S.settings[d.k] = d.k === 'rate' ? +d.v : d.v; save(); render(); if (d.k === 'rate') speak('こんにちは'); },
   sfx: () => { S.settings.sfx = !S.settings.sfx; save(); render(); if (S.settings.sfx) sfx('ok'); },
   backup: () => { const txt = JSON.stringify(S); if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(() => toast('백업을 복사했어요. 메모 앱에 붙여 두세요'), () => showBackup(txt)); else showBackup(txt); },
