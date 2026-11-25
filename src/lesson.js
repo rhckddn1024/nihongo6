@@ -21,6 +21,7 @@ const normHg = s => String(s).replace(/\(.*?\)/g, '').replace(/[\s\-ー~.,!?]/g,
 const shortPh = p => p.w !== 'staff' && flat(p.k).length <= 9;
 const hasKata = s => /[ァ-ヶ]/.test(s);
 const particleSlip = k => normKana(String(k).replace(/_は/g, 'わ').replace(/_を/g, 'お').replace(/_へ/g, 'え'));
+const learnedScenes = until => uniq(DAYS.slice(0, until).flatMap(d => d.s2 && d.s2.rp ? (d.s2.rp === 'ALL' ? ['konbini', 'train', 'restaurant', 'pharmacy', 'stay'] : [d.s2.rp]) : [])).filter(k => RP[k]);
 const learnedPh = until => uniq(DAYS.slice(0, until).flatMap(d => (d.s2 && d.s2.ph) || [])).map(id => PH_BY[id]).filter(Boolean);
 const stamp = (list, stage) => list.filter(Boolean).map(x => Object.assign({}, x, {stage: x.stage || stage}));
 
@@ -161,6 +162,24 @@ function exMatchKana(list, sound) {
   const use = distinctByHg(list, 5);
   return {t: 'match', sound: !!sound, pairs: use.map(k => ({a: sound ? '' : `<span class="okana sm" lang="ja">${k}</span>`, b: sound ? `<span class="okana sm" lang="ja">${k}</span>` : esc(KANA_INFO[k].hg), key: k, say: k}))};
 }
+const exMatchPair = list => ({t: 'match', pairs: list.slice(0, 5).map(k => ({a: `<span class="okana sm" lang="ja">${k}</span>`, b: `<span class="okana sm" lang="ja">${kataToHira(k)}</span>`, key: k, say: k}))});
+/* rule application: か + ゛ → が, き + small ゃ → きゃ */
+function exCombine(res, pool) {
+  const h = kataToHira(res), kata = h !== res, toK = x => kata ? hiraToKata(x) : x;
+  let base, mark;
+  if (h.length === 2) { base = h[0]; mark = `작은 ${h[1]}`; }
+  else if (DAKU_OFF[h]) { base = DAKU_OFF[h]; mark = '゛'; }
+  else if (HANDAKU_OFF[h]) { base = HANDAKU_OFF[h]; mark = '゜'; }
+  else return null;
+  const wrong = uniq([toK(base), ...shuffle(pool.filter(x => x !== res && KANA_INFO[x] && KANA_INFO[x].hg !== KANA_INFO[res].hg))]).slice(0, 3);
+  return {t: 'choice', prompt: '합치면 어떤 글자가 돼요?', q: `<div class="qkana" lang="ja">${toK(base)} <small>+ ${esc(mark)}</small></div>`, grid: true,
+    opts: shuffle([res, ...wrong]).map(x => ({h: `<span class="okana" lang="ja">${x}</span>`, v: x})), ans: res, say: res, srs: KANA_INFO[res] ? 'k:' + res : '', ansLabel: `${jaSpan(res)} ${esc((KANA_INFO[res] || {}).hg || '')}`};
+}
+const exSaySentence = (d, shadow) => ({t: 'speak', c: {ko: d.ko, jp: clean(d.k), kana: d.k}, srs: '', shadow: !!shadow});
+function exNumSay(lv) {
+  const q = NUM_LEVELS[lv].gen();
+  return {t: 'speak', prompt: '일본어로 읽어 봐요', c: {ko: q.show, jp: q.k, kana: q.k, num: q.v, time: !!q.time}, srs: ''};
+}
 const exMatchPh = list => ({t: 'match', wide: true, pairs: list.slice(0, 5).map(p => ({a: jaSpan(clean(p.k)), b: esc(p.ko), key: p.id, say: p.k}))});
 
 /* ---------- recipes ---------- */
@@ -203,10 +222,12 @@ function kanaTeach(list) {
   if (rows.length > 1 && rows[rows.length - 1].length < 3) rows[rows.length - 2].push(...rows.pop());
   rows.forEach((r, ri) => {
     ex.push(exIntroRow(r));
+    if (!kata) ex.push(...stamp(pick(r, Math.min(3, r.length)).map(k => exCombine(k, list)).filter(Boolean), 'practice'));
+    if (kata) ex.push(...stamp([exMatchPair(pick(r.filter(k => KANA_INFO[k]), Math.min(5, r.length)))], 'practice'));
     if (kata) ex.push(...stamp(r.filter(canDraw).map(k => exDraw(k, 'trace')), 'practice'));
-    const tests = kata ? r : pick(r, Math.min(yoon ? 3 : 4, r.length));
+    const tests = kata ? pick(r, list.length > 20 ? 3 : r.length) : pick(r, Math.min(yoon ? 3 : 4, r.length));
     ex.push(...stamp(tests.map((k, j) => j % 2 ? exListenKana(k, pool) : exRead(k, pool)), 'practice'));
-    if (kata) ex.push(...stamp(pick(r.filter(canDraw), 3).map(k => exDraw(k, 'flash')), 'practice'));
+    if (kata) ex.push(...stamp(pick(r.filter(canDraw), list.length > 20 ? 2 : 3).map(k => exDraw(k, 'flash')), 'practice'));
     if (ri % 2 === 1 || ri === rows.length - 1) ex.push(...stamp([exMatchKana(pick(r, Math.min(5, r.length)), ri % 2 === 1)], 'practice'));
   });
   return ex;
@@ -251,7 +272,7 @@ function grammarSet(ch, part) {
   const half = Math.ceil(g.pts.length / 2);
   const pts = part === 2 ? g.pts.slice(half) : g.pts.slice(0, half);
   const dr = part === 2 ? g.dr : g.dr.slice(0, Math.ceil(g.dr.length / 2)), bl = part === 2 ? g.bl : g.bl.slice(0, Math.ceil(g.bl.length / 2));
-  const teach = [...pts.map(exRule), ...bl.map(b => exBlank(b, 'practice')), ...stamp(dr.map(d => exTiles(d, '')), 'practice')];
+  const teach = [...pts.map(exRule), ...stamp(pick(dr, 2).map(d => exSaySentence(d, true)), 'practice'), ...bl.map(b => exBlank(b, 'practice')), ...stamp([...dr.map(d => exTiles(d, '')), exSaySentence(pick(dr, 1)[0])], 'practice')];
   const check = [...bl.map(b => exBlank(b, 'check')), ...stamp(pick(dr, 3).map(d => exTiles(d, '')), 'check')];
   return {pts, teach, check};
 }
@@ -375,8 +396,9 @@ function setLesson(i, n) {
     const all = [...(chk.length ? [checkIntro(), ...chk] : []), ...(chk.length ? items.slice(0, Math.max(15, 45 - chk.length)) : items)];
     return {items: all.length ? [goal, ...all] : [], mastery: chk.length > 0};
   }
-  if (info.kind === 'talk') return {items: [goal, ...chatSteps(d.talk)], mastery: false};
-  if (info.kind === 'pairs') return {items: [goal, ...stamp(pairSet(null, 12), 'practice')], mastery: false};
+  const weekShadow = () => stamp(pick(learnedPh(i).filter(p => p.w !== 'staff'), 6).map(p => exSpeak(p, '', true)), 'review');
+  if (info.kind === 'talk') return {items: [goal, ...chatSteps(d.talk), ...weekShadow()], mastery: false};
+  if (info.kind === 'pairs') return {items: [goal, ...stamp(pairSet(null, 20), 'practice'), ...weekShadow()], mastery: false};
   if (info.kind === 'core' || info.kind === 'sos') {
     const list = (info.kind === 'core' ? CORE30 : ['tr1', 'tr2', 'tr3', 'tr4', 'tr5', 'tr6', 'b9', 'b12', 'b13']).map(id => PH_BY[id]);
     return {items: [goal, ...stamp([...pick(list, 8).map(p => exSpeak(p)), exMatchPh(pick(list, 5))], 'practice'), checkIntro(), ...phraseCheck(pick(list, 8).map(p => p.id))], mastery: true};
@@ -417,10 +439,20 @@ function buildSet(i, n) {
   if (s2.ph) { teach.push(...phraseTeach(s2.ph)); check.push(...phraseCheck(s2.ph)); }
   if (s2.rp) teach.push(...rpSteps(s2.rp));
   if (s2.talk) teach.push(...chatSteps(s2.talk));
-  if (s2.num) { teach.push(...stamp(Array.from({length: 4}, () => exNum(s2.num)), 'practice')); check.push(...stamp([exNum(s2.num), exNum(s2.num)], 'check')); }
+  if (s2.num) { teach.push(...stamp([...Array.from({length: 4}, () => exNum(s2.num)), exNumSay(s2.num), exNumSay(s2.num)], 'practice')); check.push(...stamp([exNum(s2.num), exNum(s2.num)], 'check')); }
   if (s2.pairs) teach.push(...stamp(pairSet(s2.pairs, 4), 'practice'));
   if (s2.hanja) { const h = hanjaSet(s2.hanja); teach.push(...h.teach); check.push(...h.check); }
   if (s2.signs) { const sg = signSet(s2.signs); teach.push(...sg.teach); check.push(...sg.check); }
+  if (s2.ph) {
+    const today = s2.ph.map(id => PH_BY[id]).filter(p => p && p.w !== 'staff');
+    teach.push(...stamp([
+      ...today.filter(p => p.c).slice(0, 2).map(p => exSaySentence({ko: `${p.ko} (친구한테)`, k: p.cr || p.c}, true)),
+      ...shuffle(today).map(p => Object.assign(exSpeak(p, ''), {prompt: '안 보고 떠올려 말해 봐요'}))
+    ], 'practice'));
+  }
+  const older = pick(learnedPh(i).filter(p => p.w !== 'staff' && !(s2.ph || []).includes(p.id)), 4);
+  if (older.length) teach.push(...stamp(older.map(p => exSpeak(p, '', true)), 'review'));
+  if (!s2.rp && !s2.talk && i >= 6) { const sc = learnedScenes(i); if (sc.length) teach.push(...rpSteps(pick(sc, 1)[0])); }
   if (teach.length < 12) {
     const own = new Set(s2.ph || []);
     const extra = pick(learnedPh(i).filter(p => !own.has(p.id)), 12 - teach.length);

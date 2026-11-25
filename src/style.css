@@ -267,7 +267,7 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .ph{display:flex;gap:12px;align-items:center;padding:12px 16px;position:relative}
 .ph+.ph::before{content:"";position:absolute;left:16px;right:0;top:0;border-top:.5px solid var(--sep)}
 .ph .tx{flex:1;display:flex;flex-direction:column;gap:2px}
-.ph .jp{font-size:19px;line-height:1.35}
+.ph .jp{font-size:19px;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .ph .ko{font-size:15px;color:var(--label2)}
 .ph .cas{font-size:15px;color:var(--tint)}
 .ph .note{font-size:13px;color:var(--label2)}
@@ -342,7 +342,7 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .lq{display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0 22px;text-align:center}
 .qkana{font-size:min(32vw,128px);line-height:1.05}
 .qsign{font-size:64px;line-height:1.2}
-.qjp{font-size:28px;font-weight:600;line-height:1.35}
+.qjp{font-size:28px;font-weight:600;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .qko{font-size:24px;font-weight:600;line-height:1.35}
 .qsub{font-size:22px;color:var(--label2)}
 .lq .hg{font-size:15px}
@@ -384,7 +384,7 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .mnlist p{margin:5px 2px;font-size:15px;color:var(--label2)}
 .mnlist span{color:var(--label);font-size:18px;margin-right:6px}
 .phcard{position:relative;background:var(--card2);border-radius:20px;padding:22px 18px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
-.pjp{font-size:30px;font-weight:600;line-height:1.35}
+.pjp{font-size:30px;font-weight:600;line-height:1.35;word-break:keep-all;overflow-wrap:anywhere}
 .pko{font-size:19px}
 .pcas{display:flex;align-items:center;flex-wrap:wrap;justify-content:center;gap:6px;font-size:16px;color:var(--tint);margin-top:6px}
 .pcas small{font-size:13px;color:var(--label2);width:100%}

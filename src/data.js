@@ -372,7 +372,7 @@ const LECTURES = {
 };
 const LECTURE_TOPIC = {1: '인사와 です', 2: '과거형과 こそあど', 3: 'な형용사', 4: 'い형용사', 5: '숫자, 가격, 시간, 개수', 6: '3~6과 본문과 ね・よ', 7: '동사 그룹', 8: 'ます형', 9: '9·10·12과 본문', 10: 'ある와 いる', 11: '7·8과 본문과 가족 호칭', 12: 'て형'};
 const LECTURE_VIDEO = Object.assign({12: 'VdfjRWUdizM'}, ...Object.values(LECTURES).map(x => ({[x[0]]: x[1]})));
-const lectureOf = i => { const x = LECTURES[i + 1]; return x ? {n: x[0], v: x[1], from: x[2], to: x[3], mins: Math.round((x[3] - x[2]) / 60)} : null; };
+const lectureOf = i => { const x = LECTURES[i + 1]; return x ? {n: x[0], v: x[1], from: Math.max(0, x[2] - 3), to: x[3], mins: Math.round((x[3] - x[2]) / 60)} : null; };
 const tsOf = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
 /* ---- curriculum (43 days) ---- */

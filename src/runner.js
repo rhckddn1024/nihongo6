@@ -451,6 +451,7 @@ const RENDER = {
       <div class="kintro"><button class="kcard" data-say="${k.k}" aria-label="${esc(k.hg)} 듣기"><span class="kbig" lang="ja">${k.k}</span><span class="khg">${esc(k.hg)}</span></button>
       ${STROKES[k.k] ? `<button class="kstroke" data-draw aria-label="획순 다시 보기">${strokeSVG(k.k, 'anim')}<small>획순</small></button>` : ''}</div>
       ${k.mn ? `<p class="kmn">${esc(k.mn)}</p>` : ''}
+      ${isKata(k.k) ? `<p class="tiny center">히라가나로는 <span lang="ja" style="font-size:20px">${kataToHira(k.k)}</span></p>` : ''}
       <p class="lhint">글자를 누르면 다시 들려요. 획순을 보고 손가락으로 한 번 따라 써 봐요.</p>`;
     wireAudio(body);
     const dr = $('[data-draw]', body);
@@ -577,7 +578,7 @@ const RENDER = {
     const p = ex.id ? PH_BY[ex.id] : null, c = ex.c;
     const ko = p ? p.ko : c.ko, jp = p ? clean(p.k) : c.jp, read = p ? p.k : (c.kana || c.jp);
     const rec = canRecord();
-    const top = ex.shadow ? `<h2 class="lp">듣고 따라 말해 봐요</h2><div class="phcard"><button class="spk lg" data-say="${esc(read)}" aria-label="듣기">${IC.spk}</button><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span><div class="pko">${esc(ko)}</div></div>` : `<h2 class="lp">소리 내서 말해 봐요</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>`;
+    const top = ex.shadow ? `<h2 class="lp">듣고 따라 말해 봐요</h2><div class="phcard"><button class="spk lg" data-say="${esc(read)}" aria-label="듣기">${IC.spk}</button><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span><div class="pko">${esc(ko)}</div></div>` : `<h2 class="lp">${esc(ex.prompt || '소리 내서 말해 봐요')}</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>`;
     body.innerHTML = `${top}
       ${rec ? `<div class="recbox"><button class="mic" data-rec aria-label="녹음">${IC.mic}</button><span class="recst tiny">녹음 버튼을 누르고 말한 다음 다시 눌러요</span></div>` : '<p class="lhint">입으로 다 말한 다음 정답을 확인해요</p>'}
       ${SRec ? `<div class="srbox"><button class="btn soft sm" data-sr>${IC.ear} 알아듣는지 확인</button><p class="srout tiny" aria-live="polite"></p></div>` : ''}
@@ -602,7 +603,13 @@ const RENDER = {
       listenJa(res => {
         srb.disabled = false;
         if (res.error) { sro.textContent = res.error === 'not-allowed' || res.error === 'service-not-allowed' ? '마이크 권한이 필요해요' : res.error === 'no-speech' ? '소리가 안 들렸어요. 다시 해 봐요' : '지금은 음성 인식을 쓸 수 없어요'; return; }
-        const target = normJa(clean(read)), best = Math.max(...res.alts.map(a => levRatio(normJa(a), target)));
+        const target = normJa(clean(read));
+        let best = Math.max(...res.alts.map(a => levRatio(normJa(a), target)));
+        if (c && c.num) {
+          const want = c.time ? c.num.split(':').map(Number) : null;
+          const hit = res.alts.some(a => { const z = a.replace(/[,，\s]/g, ''); if (!want) return z.replace(/\D/g, '') === c.num; const m = z.match(/(\d+)時(?:(\d+)分|(半))?/); return m && +m[1] === want[0] && (m[3] ? 30 : +(m[2] || 0)) === want[1]; });
+          if (hit) best = 1;
+        }
         sro.innerHTML = `이렇게 들렸어요: <b lang="ja">${esc(res.alts[0])}</b><br>${best >= .85 ? '목표 문장과 거의 똑같이 들렸어요' : best >= .6 ? '비슷해요. 정답을 보고 다른 곳을 찾아봐요' : '다르게 들렸어요. 한자로 바뀌어 나왔다면 맞았을 수도 있어요'}`;
       });
     });
