@@ -390,6 +390,8 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .pcas small{font-size:13px;color:var(--label2);width:100%}
 .pnote{font-size:14px;color:var(--label2);margin:6px 0 0}
 .rtext{font-size:17px;line-height:1.55;margin:0 0 18px}
+.lec{position:relative;width:100%;aspect-ratio:16/9;border-radius:14px;overflow:hidden;background:#000}
+.lec iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .rex{display:flex;flex-direction:column;gap:8px}
 .rx{display:grid;grid-template-columns:1fr auto;align-items:center;column-gap:12px;row-gap:2px;padding:12px 14px;border-radius:14px;background:var(--card2);text-align:left}
 .rx span{font-size:21px;grid-column:1}

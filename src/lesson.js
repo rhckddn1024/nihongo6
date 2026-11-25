@@ -2,7 +2,7 @@
  A set is one class: quiz on yesterday → today's goal → (textbook) → explanation → listen first → practice → check test (80% to pass) → homework.
  Exercise objects carry `stage` (shown as a chip) and `t` (renderer in runner.js). */
 
-const STAGES = {quiz: '쪽지시험', goal: '오늘 목표', book: '교재', explain: '설명', listen: '듣기 먼저', practice: '연습', check: '확인 테스트', review: '복습'};
+const STAGES = {quiz: '쪽지시험', goal: '오늘 목표', book: '교재', lecture: '강의', explain: '설명', listen: '듣기 먼저', practice: '연습', check: '확인 테스트', review: '복습'};
 const PASS = 0.8;
 
 /* ---------- small helpers ---------- */
@@ -64,6 +64,7 @@ function phOthers(p, n, field) {
 const exStage = (stage, title, text) => ({t: 'stageIntro', stage, title, text});
 const exGoal = (lines, meta) => ({t: 'goal', stage: 'goal', lines, meta});
 const exBook = (bp, mins) => ({t: 'book', stage: 'book', bp, mins});
+const exLecture = (lec, bp) => ({t: 'lecture', stage: 'lecture', lec, bp});
 const exIntroKana = k => ({t: 'introKana', stage: 'explain', k});
 const exIntroRow = kana => ({t: 'introRow', stage: 'explain', kana});
 const exIntroPh = id => ({t: 'introPh', stage: 'listen', id});
@@ -374,7 +375,8 @@ function setLesson(i, n) {
     }
     if (bp && bp.ch && GRAMMAR[bp.ch]) { const g = grammarSet(bp.ch, bp.part); teach.push(...g.teach, ...readingPractice()); check.push(...g.check); }
     else if (!teach.length) teach.push(...readingPractice());
-    const book = bp ? [exBook(bp, bp.ch ? 10 : 5)] : [];
+    const lec = lectureOf(i);
+    const book = lec && bp ? [exLecture(lec, bp)] : bp ? [exBook(bp, bp.ch ? 10 : 5)] : [];
     return {items: [...quiz, goal, ...book, ...teach, ...(check.length ? [checkIntro(), ...check] : [])], mastery: check.length > 0};
   }
   const s2 = d.s2;
@@ -405,7 +407,9 @@ function setContents(i, n) {
   if (info.kind === 'sos') rows.push({icon: 'sos', col: COL.red, t: '곤란할 때 쓰는 말', s: '길을 잃거나 물건을 잃어버렸을 때'}, {act: 'depart', icon: 'list', col: COL.green, t: '출국 체크리스트', s: `${Object.values(S.check).filter(Boolean).length}/${DEPART_CHECK.length} 완료`});
   if (info.kind === 'review') rows.push({icon: 'review', col: COL.cyan, t: dueCards().length ? `다시 볼 카드 ${Math.min(dueCards().length, REVIEW_CAP)}장` : '오늘 배운 것 다시 보기', s: d.test ? '이번 주에 배운 것까지 섞어서 나와요' : '익숙한 카드일수록 직접 쓰거나 말하는 문제로 나와요'}, {act: 'recall', data: {d: dateOfIdx(i)}, icon: 'pen', col: COL.indigo, t: '떠올려 적기', s: '오늘 배운 걸 안 보고 종이에 적어요'});
   if (info.kind === 's1') {
-    if (bp) rows.push({icon: 'book', col: COL.orange, t: `${bookLabel(bp)} ${bp.from}~${bp.to}쪽`, s: bp.ch ? '본문을 소리 내서 읽고 연습 문제까지 풀어요' : '오늘 글자 부분을 훑어봐요'});
+    const lec = lectureOf(i);
+    if (bp && lec) rows.push({icon: 'play', col: COL.red, t: `미미센세 ${lec.n}강 ${tsOf(lec.from)}~${tsOf(lec.to)}`, s: `${LECTURE_TOPIC[lec.n]}. ${bookLabel(bp)}을 펴 놓고 같이 봐요, ${lec.mins}분`});
+    else if (bp) rows.push({icon: 'book', col: COL.orange, t: `${bookLabel(bp)} ${bp.from}~${bp.to}쪽`, s: bp.ch ? '본문을 소리 내서 읽고 연습 문제까지 풀어요' : '오늘 글자 부분을 훑어봐요'});
     if (d.s1.kana) rows.push({icon: 'kana', col: COL.red, t: `새 글자 ${d.s1.kana.length}개`, s: `<span lang="ja">${d.s1.kana.slice(0, 12).join(' ')}${d.s1.kana.length > 12 ? ' …' : ''}</span>`});
     if (d.s1.confuse) rows.push({icon: 'kana', col: COL.purple, t: '헷갈리는 글자', s: '모양이 비슷한 글자 구별하기'});
     if (d.s1.drill) rows.push({icon: 'bolt', col: COL.orange, t: '46자 빠르게 읽기', s: '한 글자에 2초 안쪽이 목표예요'});
@@ -487,7 +491,8 @@ function startSet(date, n) {
   if (info.kind === 'test') { startTest(i, date); return; }
   const L = setLesson(i, n);
   if (!L || !L.items.some(x => x.t !== 'goal')) { toast(n === 3 ? '아직 복습할 카드가 없어요. 세트 1과 2를 먼저 해요' : '이 세트는 문제가 없어요'); return; }
-  runLesson({title: info.name, items: L.items, mastery: L.mastery, srs: info.kind === 'review', set: {date, n, i}, target: 20,
+  const lecX = n === 1 && lectureOf(i);
+  runLesson({title: info.name, items: L.items, mastery: L.mastery, srs: info.kind === 'review', set: {date, n, i}, target: lecX ? 20 + Math.max(0, lecX.mins - 10) : 20,
     onDone: r => {
       markSet(date, n, r);
       r.xp = 20 + (r.checkAcc === 100 && !r.retested ? 5 : 0);

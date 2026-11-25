@@ -369,7 +369,10 @@ function pBook() {
   pushPage('교재 진도', el => {
     el.innerHTML = `<h1 class="large">교재 진도</h1><p class="subtitle">NEW 가장 쉬운 독학 일본어 첫걸음 · 끝낸 과를 눌러 표시해요</p>
       <div class="list">${BOOK.map(b => { const dts = sched[b.n] || []; const on = !!S.book[b.n]; return `<button class="row" data-act="bookToggle" data-n="${b.n}" aria-pressed="${on}"><span class="tick ${on ? 'on' : ''}">${on ? IC.check : ''}</span><span class="t"><b lang="ja">${b.n ? b.n + '과 ' : ''}${esc(b.t)}</b><small>${esc(b.ko)} · ${b.p}~${b.e}쪽${dts.length ? ' · ' + fmtShort(dts[0]) + (dts.length > 1 ? '~' + fmtShort(dts[dts.length - 1]) : '') : ''}${b.n >= 13 ? ' · 일본에서' : ''}</small></span></button>`; }).join('')}</div>
-      <p class="sf">부록의 활용표(292쪽)와 숫자, 시간 읽기는 5주차에 같이 보면 좋아요. 기초 단어 100개(314쪽)는 카드로 직접 넣어도 돼요.</p>`;
+      <p class="sf">부록의 활용표(292쪽)와 숫자, 시간 읽기는 5주차에 같이 보면 좋아요. 기초 단어 100개(314쪽)는 카드로 직접 넣어도 돼요.</p>
+      <p class="sh">미미센세 강의</p>
+      <div class="list">${Object.keys(LECTURE_TOPIC).map(Number).map(n => { const days = Object.keys(LECTURES).filter(d => LECTURES[d][0] === n).map(d => dateOfIdx(+d - 1)); return `<a class="row" href="https://www.youtube.com/watch?v=${LECTURE_VIDEO[n]}" target="_blank" rel="noopener"><span class="t"><b>${n}강 ${esc(LECTURE_TOPIC[n])}</b><small>${days.length ? days.map(fmtShort).join(', ') + ' 세트 1에서 나눠 봐요' : '일본에서 13과를 할 때 봐요'}</small></span>${IC.chev}</a>`; }).join('')}</div>
+      <p class="sf">같은 교재로 진행하는 미미센세의 유튜브 강의예요. 11과는 아직 강의가 없어서 교재로 공부해요.</p>`;
   }, {refresh: true, keepScroll: true});
 }
 function pWeek(w) {

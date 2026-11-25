@@ -319,6 +319,17 @@ const RENDER = {
     const iv = setInterval(tick, 500);
     return {kind: 'intro', label: '다 했어요'};
   },
+  lecture(ex, body) {
+    const l = ex.lec;
+    const src = `https://www.youtube-nocookie.com/embed/${l.v}?start=${l.from}&end=${l.to}&rel=0&playsinline=1`;
+    body.innerHTML = `<h2 class="lp">미미센세 ${l.n}강, ${esc(LECTURE_TOPIC[l.n])}</h2>
+      <p class="tiny" style="margin:-6px 0 12px">${tsOf(l.from)}부터 ${tsOf(l.to)}까지 ${l.mins}분이에요. ${esc(bookLabel(ex.bp))}을 펴 놓고 봐요. 화면이 안 나오면 유튜브에서 봐도 돼요.</p>
+      <div class="lec"><iframe src="${src}" title="미미센세 ${l.n}강" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+      <div class="cmpbtns mt12"><a class="btn soft sm" href="https://www.youtube.com/watch?v=${l.v}&amp;t=${l.from}s" target="_blank" rel="noopener">${IC.play} 유튜브에서 보기</a><button class="btn grey sm" data-bookinstead>교재로 할게요</button></div>
+      <ol class="steps mt16"><li>선생님이 읽을 때 같이 소리 내서 읽어요</li><li>책에 없는 설명은 교재 여백에 적어요</li><li>${tsOf(l.to)}에서 멈추고 아래 버튼을 눌러요</li></ol>`;
+    $('[data-bookinstead]', body).addEventListener('click', () => { LESSON.q[LESSON.i] = exBook(ex.bp, 10); showEx(); });
+    return {kind: 'intro', label: '다 봤어요'};
+  },
   introKana(ex, body) {
     const k = KANA_INFO[ex.k];
     body.innerHTML = `<p class="newtag">새 글자</p>
