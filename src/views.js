@@ -351,7 +351,7 @@ function pWrongNote() {
     el.innerHTML = `<h1 class="large">오답 노트</h1><p class="subtitle">틀린 횟수가 많은 순서예요. 맞히기 시작하면 다음 복습 날짜가 뒤로 밀려요.</p>
       ${ids.length ? `<div class="stack"><button class="btn" data-go>오답만 연습</button><button class="btn soft" data-print>종이로 뽑기</button></div>
       <div class="list mt16">${ids.map(id => `<div class="row"><span class="t"><b>${label(id)}</b><small>${S.cards[id].w}번 틀림${S.cards[id].lw ? ' · 마지막 ' + fmtShort(S.cards[id].lw) : ''}</small></span><span class="v small">${fmtShort(S.cards[id].due)}</span></div>`).join('')}</div>` : '<div class="empty-state">아직 틀린 게 없어요</div>'}`;
-    const go = $('[data-go]', el); if (go) go.addEventListener('click', () => runLesson({title: '오답 노트', items: stamp(ids.slice(0, 20).map(recallItem), 'review'), srs: true}));
+    const go = $('[data-go]', el); if (go) go.addEventListener('click', () => runLesson({title: '오답 노트', items: stamp(ids.slice(0, 20).map(reviewItem).filter(Boolean), 'review'), srs: true}));
     const pr = $('[data-print]', el); if (pr) pr.addEventListener('click', () => {
       const kana = ids.filter(id => id[0] === 'k').slice(0, 20), ph = ids.filter(id => id[0] === 'p' && PH_BY[id.slice(2)].w !== 'staff').slice(0, 12);
       const sec = [];

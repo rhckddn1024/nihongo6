@@ -74,7 +74,7 @@ function showEx() {
   const kind = typeof out === 'string' ? out : out.kind;
   L.el.classList.toggle('nofoot', kind === 'auto');
   if (kind === 'intro') primary(out.label || '계속', true, nextEx);
-  else if (kind === 'speak') primary('정답 보기', true, () => api.check());
+  else if (kind === 'speak') primary(out.label || '정답 보기', true, () => api.check());
   else if (kind === 'auto') setButtons('');
   else primary('확인', false, () => api.check());
 }
@@ -89,13 +89,15 @@ function resolveEx(res) {
   }
   const ms = performance.now() - L.shownAt;
   record(ex, res.ok, ms);
-  const tone = res.verdict === 'o' ? 'meh' : res.ok ? 'ok' : 'bad';
+  const soft = !res.ok && ex.stage === 'practice';
+  const tone = soft || res.verdict === 'o' ? 'meh' : res.ok ? 'ok' : 'bad';
   L.el.classList.add('fb-' + tone); L.el.classList.remove('nofoot');
   sfx(res.ok ? 'ok' : 'bad');
   if (!res.ok) haptic(30);
   if (res.say) speak(res.say);
-  const title = res.title || (ex.unscored ? (res.ok ? '맞혔어요' : '이런 뜻이에요') : res.ok ? PRAISE[Math.floor(Math.random() * PRAISE.length)] : '틀렸어요');
+  const title = soft && !res.title ? '괜찮아요, 이렇게 기억해요' : res.title || (ex.unscored ? (res.ok ? '맞혔어요' : '이런 뜻이에요') : res.ok ? PRAISE[Math.floor(Math.random() * PRAISE.length)] : '틀렸어요');
   const showAns = (!res.ok || ex.unscored) && res.answer;
+  if (soft) res.detail = [res.detail, '뒤에서 한 번 더 나와요'].filter(Boolean).join('<br>');
   L.fb.innerHTML = `<span class="fic">${res.ok ? IC.check : ex.unscored ? IC.spk : IC.x}</span><div class="fbt"><b>${esc(title)}</b>${showAns ? `<p class="fans">${ex.unscored ? '' : '<span class="flab">정답</span>'}${res.answer}</p>` : ''}${res.detail ? `<p>${res.detail}</p>` : ''}${ex.fast && res.ok ? `<p>${(ms / 1000).toFixed(1)}초</p>` : ''}</div>`;
   L.fb.className = 'lfb ' + (ex.unscored ? 'meh' : tone); L.fb.hidden = false;
   if (ex.unscored) L.el.classList.replace('fb-' + tone, 'fb-meh');
@@ -384,15 +386,19 @@ const RENDER = {
   },
   draw(ex, body, api) {
     const k = ex.k, info = KANA_INFO[k], paths = STROKES[k];
-    body.innerHTML = `<h2 class="lp">${ex.recall ? `소리를 듣고 ${isKata(k) ? '가타카나' : '히라가나'}로 써요` : '획순대로 따라 써요'}</h2>
-      <div class="dq">${ex.recall ? '' : `<span class="dqk" lang="ja">${k}</span>`}<span class="dqh">${esc(info.hg)}</span><button class="spk" data-say="${k}" aria-label="듣기">${IC.spk}</button></div>
-      <div class="dpad"><svg viewBox="0 0 109 109" class="dsvg" role="img" aria-label="글자를 쓰는 칸"><g class="guide"><path d="M54.5 3v103M3 54.5h103"/></g>${ex.recall ? '' : `<g class="model">${paths.map(d => `<path d="${d}"/>`).join('')}</g>`}<g class="dok"></g><g class="hint"></g><polyline class="ink" points=""/></svg></div>
-      <div class="dbar"><span class="dcount">1 / ${paths.length}획</span><button class="btn grey sm" data-giveup>${ex.recall ? '모르겠어요' : '다음 획 보기'}</button></div>`;
+    const showModel = !ex.recall;
+    body.innerHTML = `<h2 class="lp">${ex.recall ? `소리를 듣고 ${isKata(k) ? '가타카나' : '히라가나'}로 써요` : ex.flash ? '잠깐 보고, 가린 다음 써요' : '소리 내서 읽으며 따라 써요'}</h2>
+      <div class="dq">${ex.recall || ex.flash ? '' : `<span class="dqk" lang="ja">${k}</span>`}<span class="dqh">${esc(info.hg)}</span><button class="spk" data-say="${k}" aria-label="듣기">${IC.spk}</button></div>
+      <div class="dpad"><svg viewBox="0 0 109 109" class="dsvg" role="img" aria-label="글자를 쓰는 칸"><g class="guide"><path d="M54.5 3v103M3 54.5h103"/></g>${showModel ? `<g class="model ${ex.flash ? 'flash' : ''}">${paths.map(d => `<path d="${d}"/>`).join('')}</g>` : ''}<g class="dok"></g><g class="hint"></g><polyline class="ink" points=""/></svg></div>
+      <div class="dbar"><span class="dcount">1 / ${paths.length}획</span><button class="btn grey sm" data-giveup>${ex.recall ? '모르겠어요' : ex.flash ? '한 번 더 보기' : '다음 획 보기'}</button></div>`;
     wireAudio(body);
     if (ex.recall) autoPlay(ex, k);
     const svg = $('.dsvg', body), ink = $('.ink', svg), doneG = $('.dok', svg), hintG = $('.hint', svg), cnt = $('.dcount', body);
     const tpls = paths.map(d => samplePath(svg, d));
-    let j = 0, miss = 0, missHere = 0, cur = null, finished = false;
+    let j = 0, miss = 0, missHere = 0, cur = null, finished = false, hidden = !ex.flash;
+    const modelG = $('.model', svg);
+    const peek = ms => { hidden = false; modelG.classList.add('show'); cnt.textContent = '잘 보고 기억해요'; setTimeout(() => { if (finished) return; modelG.classList.remove('show'); hidden = true; cnt.textContent = `${j + 1} / ${paths.length}획`; }, ms); };
+    if (ex.flash) peek(2200);
     const toLocal = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 109, (e.clientY - r.top) / r.height * 109]; };
     const hint = i => { hintG.innerHTML = `<path d="${paths[i]}"/><circle cx="${tpls[i].pts[0][0].toFixed(1)}" cy="${tpls[i].pts[0][1].toFixed(1)}" r="3.4"/>`; };
     const end = gaveUp => {
@@ -405,7 +411,7 @@ const RENDER = {
       j++; missHere = 0; hintG.innerHTML = '';
       if (j >= paths.length) end(false); else cnt.textContent = `${j + 1} / ${paths.length}획`;
     };
-    svg.addEventListener('pointerdown', e => { if (finished || LESSON.phase !== 'ask') return; e.preventDefault(); try { svg.setPointerCapture(e.pointerId); } catch (x) {} cur = [toLocal(e)]; });
+    svg.addEventListener('pointerdown', e => { if (finished || !hidden || LESSON.phase !== 'ask') return; e.preventDefault(); try { svg.setPointerCapture(e.pointerId); } catch (x) {} cur = [toLocal(e)]; });
     svg.addEventListener('pointermove', e => { if (!cur) return; cur.push(toLocal(e)); ink.setAttribute('points', cur.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')); });
     svg.addEventListener('pointerup', () => {
       if (!cur) return;
@@ -417,11 +423,27 @@ const RENDER = {
     svg.addEventListener('pointercancel', () => { cur = null; ink.setAttribute('points', ''); });
     $('[data-giveup]', body).addEventListener('click', () => {
       if (finished) return;
+      if (ex.flash) { if (hidden) { miss++; peek(1500); } return; }
       if (!ex.recall) { hint(j); return; }
       doneG.innerHTML = paths.map(d => `<path d="${d}"/>`).join('');
       end(true);
     });
     return 'auto';
+  },
+  wrap(ex, body) {
+    const d = DAYS[ex.i], bp = ex.n === 1 ? bookPart(ex.i) : null;
+    const kana = ex.n === 1 && d.s1 && d.s1.kana ? d.s1.kana : [];
+    const phs = ex.n === 2 && d.s2 && d.s2.ph ? d.s2.ph.map(id => PH_BY[id]).filter(Boolean) : [];
+    const gr = bp && bp.ch && GRAMMAR[bp.ch] ? grammarSet(bp.ch, bp.part).pts : [];
+    let list = '';
+    if (kana.length) list = `<div class="krow ${kana.length > 5 ? 'k3' : ''}">${kana.map(k => `<button class="kt" data-say="${k}"><span lang="ja">${k}</span><b>${esc((KANA_INFO[k] || {}).hg || toHangul(k))}</b></button>`).join('')}</div>`;
+    else if (phs.length) list = `<div class="list">${phs.map(p => `<div class="ph"><div class="tx"><span class="jp" lang="ja">${esc(clean(p.k))}</span><span class="ko">${esc(p.ko)}</span></div><button class="spk" data-say="${esc(p.k)}" aria-label="듣기">${IC.spk}</button></div>`).join('')}</div>`;
+    else if (gr.length) list = `<ul class="goals">${gr.map(g => `<li>${IC.check}<span>${esc(g.title)}</span></li>`).join('')}</ul>`;
+    body.innerHTML = `<h2 class="lp">오늘 배운 것</h2>
+      ${list ? `<p class="tiny" style="margin:-6px 0 12px">${kana.length || phs.length ? '눌러서 한 번씩 더 들어 봐요.' : '오늘 본 문법이에요.'}</p>${list}` : '<p class="rtext">오늘 연습한 걸 머릿속으로 한 번 정리해 봐요.</p>'}
+      <p class="lhint mt16">확인 테스트는 저녁 세트 3에서 봐요. 시간을 두고 다시 떠올리는 게 더 오래 남아요. 그 사이에 숙제 시트로 한 번 더 써 보면 좋아요.</p>`;
+    wireAudio(body);
+    return {kind: 'intro', label: '세트 끝내기'};
   },
   introKana(ex, body) {
     const k = KANA_INFO[ex.k];
@@ -555,10 +577,11 @@ const RENDER = {
     const p = ex.id ? PH_BY[ex.id] : null, c = ex.c;
     const ko = p ? p.ko : c.ko, jp = p ? clean(p.k) : c.jp, read = p ? p.k : (c.kana || c.jp);
     const rec = canRecord();
-    body.innerHTML = `<h2 class="lp">소리 내서 말해 봐요</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>
+    const top = ex.shadow ? `<h2 class="lp">듣고 따라 말해 봐요</h2><div class="phcard"><button class="spk lg" data-say="${esc(read)}" aria-label="듣기">${IC.spk}</button><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span><div class="pko">${esc(ko)}</div></div>` : `<h2 class="lp">소리 내서 말해 봐요</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>`;
+    body.innerHTML = `${top}
       ${rec ? `<div class="recbox"><button class="mic" data-rec aria-label="녹음">${IC.mic}</button><span class="recst tiny">녹음 버튼을 누르고 말한 다음 다시 눌러요</span></div>` : '<p class="lhint">입으로 다 말한 다음 정답을 확인해요</p>'}
       ${SRec ? `<div class="srbox"><button class="btn soft sm" data-sr>${IC.ear} 알아듣는지 확인</button><p class="srout tiny" aria-live="polite"></p></div>` : ''}
-      <div class="reveal" hidden><div class="phcard"><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span>${p && p.c ? `<div class="pcas"><span class="tag cas">친구끼리</span><span lang="ja">${esc(p.c)}</span></div>` : ''}
+      <div class="reveal" hidden><div class="phcard ${ex.shadow ? 'bare' : ''}">${ex.shadow ? '' : `<div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span>`}${p && p.c ? `<div class="pcas"><span class="tag cas">친구끼리</span><span lang="ja">${esc(p.c)}</span></div>` : ''}
         <div class="cmpbtns"><button class="btn soft sm" data-say="${esc(read)}">${IC.spk} 원래 발음</button>${rec ? `<button class="btn grey sm" data-mine hidden>${IC.play} 내 목소리</button>` : ''}</div></div>
         <p class="lhint" data-cmp></p></div>`;
     wireAudio(body);
@@ -584,7 +607,8 @@ const RENDER = {
       });
     });
     api.setCheck(() => { recStop(); $('[data-cmp]', body).textContent = REC.url ? '두 소리를 번갈아 들어 보고, 맞게 말했는지 골라요' : '원래 발음을 듣고, 내가 말한 소리와 같았는지 골라요'; $('.reveal', body).hidden = false; const rb = $('.recbox', body); if (rb) rb.hidden = true; setTimeout(() => speak(read), 200); return {selfRate: true}; });
-    return 'speak';
+    if (ex.shadow) autoPlay(ex, read);
+    return ex.shadow ? {kind: 'speak', label: '다 말했어요'} : 'speak';
   },
   num(ex, body, api) {
     const q = ex.qv || (ex.qv = NUM_LEVELS[ex.lv].gen());

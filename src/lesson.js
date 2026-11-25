@@ -2,7 +2,7 @@
  A set is one class: quiz on yesterday → today's goal → (textbook) → explanation → listen first → practice → check test (80% to pass) → homework.
  Exercise objects carry `stage` (shown as a chip) and `t` (renderer in runner.js). */
 
-const STAGES = {quiz: '쪽지시험', goal: '오늘 목표', book: '교재', lecture: '강의', explain: '설명', listen: '듣기 먼저', practice: '연습', check: '확인 테스트', review: '복습'};
+const STAGES = {quiz: '쪽지시험', goal: '오늘 목표', book: '교재', lecture: '강의', explain: '설명', wrap: '정리', listen: '듣기 먼저', practice: '연습', check: '확인 테스트', review: '복습'};
 const PASS = 0.8;
 
 /* ---------- small helpers ---------- */
@@ -69,16 +69,16 @@ const exIntroKana = k => ({t: 'introKana', stage: 'explain', k});
 const exIntroRow = kana => ({t: 'introRow', stage: 'explain', kana});
 const exIntroPh = id => ({t: 'introPh', stage: 'listen', id});
 const exRule = c => ({t: 'rule', stage: 'explain', title: c.title, text: c.text, ex: c.ex});
-function exRead(k, pool, fast) {
+function exRead(k, pool, fast, easy) {
   const info = KANA_INFO[k];
   return {t: 'choice', prompt: '이 글자는 어떻게 읽어요?', q: `<div class="qkana" lang="ja">${k}</div>`,
-    opts: kanaChoices(k, pool, lookAlikes(k)).map(x => ({h: `<b>${esc(KANA_INFO[x].hg)}</b>`, v: x})), grid: true,
+    opts: kanaChoices(k, pool, easy ? [] : lookAlikes(k)).map(x => ({h: `<b>${esc(KANA_INFO[x].hg)}</b>`, v: x})), grid: true,
     ans: k, kana: k, srs: 'k:' + k, say: k, fast, ansLabel: `${jaSpan(k)} ${esc(info.hg)}`, fb: info.mn ? esc(info.mn) : ''};
 }
-function exListenKana(k, pool) {
+function exListenKana(k, pool, easy) {
   const info = KANA_INFO[k];
   return {t: 'choice', prompt: '들리는 글자를 골라요', audio: k, vary: true,
-    opts: kanaChoices(k, pool, soundNeighbors(k)).map(x => ({h: `<span class="okana" lang="ja">${x}</span>`, v: x})), grid: true,
+    opts: kanaChoices(k, pool, easy ? [] : soundNeighbors(k)).map(x => ({h: `<span class="okana" lang="ja">${x}</span>`, v: x})), grid: true,
     ans: k, kana: k, srs: 'k:' + k, ansLabel: `${jaSpan(k)} ${esc(info.hg)}`};
 }
 function exLookAlike(pair) {
@@ -89,7 +89,7 @@ function exLookAlike(pair) {
     opts: shuffle([a, b, ...others]).map(x => ({h: `<b>${esc(KANA_INFO[x].hg)}</b>`, v: x})), grid: true,
     ans: k, kana: k, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: `${jaSpan(a)} ${jaSpan(b)} 구별: ${esc(tip)}`};
 }
-const exDraw = (k, recall) => ({t: 'draw', k, recall, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
+const exDraw = (k, mode) => ({t: 'draw', k, mode, recall: mode === 'recall', flash: mode === 'flash', srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
 const canDraw = k => !!(STROKES[k] && KANA_INFO[k]);
 const exTypeReading = k => ({t: 'type', mode: 'hangul', prompt: '한글로 어떻게 읽는지 적어요', q: `<div class="qkana" lang="ja">${k}</div>`, ans: KANA_INFO[k].hg, alt: [KANA_INFO[k].ro], say: k, kana: k, srs: 'k:' + k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
 const exDictate = (k, srs, ko) => ({t: 'type', mode: 'kana', prompt: ko ? '들은 말을 가나로 적어요' : '들은 소리를 가나로 적어요', audio: k, vary: !ko, ans: k, srs, kata: hasKata(clean(k)), say: k, hint: ko || '', ansLabel: `${jaSpan(clean(k))}${ko ? ' ' + esc(ko) : KANA_INFO[k] ? ' ' + esc(KANA_INFO[k].hg) : ''}`});
@@ -116,7 +116,7 @@ function exHear(p, guess) {
 }
 const canTile = p => p.w !== 'staff' && tileWords(p.k).length >= 2;
 const exTiles = (p, srs) => ({t: 'tiles', ko: p.ko, k: p.k, srs: srs === undefined ? (p.id ? 'p:' + p.id : '') : srs});
-const exSpeak = (p, srs) => ({t: 'speak', id: p.id, srs: srs === undefined ? 'p:' + p.id : srs});
+const exSpeak = (p, srs, shadow) => ({t: 'speak', id: p.id, shadow: !!shadow, srs: srs === undefined ? 'p:' + p.id : srs});
 function exSign(j) {
   const s = SIGNS[j];
   const others = pick(SIGNS.filter(x => x !== s && x[2] !== s[2]), 3);
@@ -187,12 +187,13 @@ function kanaTeach(list) {
     if (chunks.length > 1 && chunks[chunks.length - 1].length === 1) chunks[chunks.length - 2].push(...chunks.pop());
     const seen = [];
     chunks.forEach((c, ci) => {
-      c.forEach(k => ex.push(exIntroKana(k)));
-      ex.push(...stamp([...c.map(k => exRead(k, pool)), ...shuffle(c).map(k => exListenKana(k, pool)), ...c.filter(canDraw).map(k => exDraw(k, false))], 'practice'));
+      c.forEach(k => { ex.push(exIntroKana(k)); if (canDraw(k)) ex.push(Object.assign(exDraw(k, 'trace'), {stage: 'explain', srs: ''})); });
+      ex.push(...stamp([...c.map(k => exRead(k, pool, false, true)), ...shuffle(c).map(k => exListenKana(k, pool, true))], 'practice'));
+      if (ci > 0) ex.push(...stamp(chunks[ci - 1].filter(canDraw).map(k => exDraw(k, 'flash')), 'practice'));
       seen.push(...c);
       if (ci % 2 === 1 && seen.length >= 4) ex.push(...stamp([exMatchKana(shuffle(seen.slice(-5)), ci % 4 === 3)], 'practice'));
     });
-    ex.push(...stamp([exMatchKana(pick(list, 5), true), ...pick(list, 3).map(exTypeReading)], 'practice'));
+    ex.push(...stamp([...chunks[chunks.length - 1].filter(canDraw).map(k => exDraw(k, 'flash')), exMatchKana(pick(list, 5), true), ...pick(list, 2).map(k => exRead(k, pool))], 'practice'));
     return ex;
   }
   const kata = list.every(isKata), yoon = list.every(k => YOON_ALL.includes(k));
@@ -202,27 +203,30 @@ function kanaTeach(list) {
   if (rows.length > 1 && rows[rows.length - 1].length < 3) rows[rows.length - 2].push(...rows.pop());
   rows.forEach((r, ri) => {
     ex.push(exIntroRow(r));
-    if (kata) ex.push(...stamp(r.filter(canDraw).map(k => exDraw(k, false)), 'practice'));
+    if (kata) ex.push(...stamp(r.filter(canDraw).map(k => exDraw(k, 'trace')), 'practice'));
     const tests = kata ? r : pick(r, Math.min(yoon ? 3 : 4, r.length));
     ex.push(...stamp(tests.map((k, j) => j % 2 ? exListenKana(k, pool) : exRead(k, pool)), 'practice'));
+    if (kata) ex.push(...stamp(pick(r.filter(canDraw), 3).map(k => exDraw(k, 'flash')), 'practice'));
     if (ri % 2 === 1 || ri === rows.length - 1) ex.push(...stamp([exMatchKana(pick(r, Math.min(5, r.length)), ri % 2 === 1)], 'practice'));
   });
   return ex;
 }
-function kanaCheck(list) {
+function kanaCheck(list, prod) {
   const items = list.length > 12 ? pick(list, 12) : shuffle(list);
-  return stamp(items.map((k, j) => j % 3 === 2 && canDraw(k) ? exDraw(k, true) : j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
+  const pool = isKata(items[0]) ? KATA_ALL : HIRA_ALL;
+  if (prod) return stamp(items.map((k, j) => j % 3 === 2 && canDraw(k) ? exDraw(k, 'recall') : j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
+  return stamp(items.map((k, j) => !KANA_INFO[k] ? exDictate(k, 'k:' + k) : j % 3 === 0 ? exRead(k, pool) : j % 3 === 1 ? exListenKana(k, pool) : exTypeReading(k)), 'check');
 }
 function phraseTeach(ids) {
   const ex = [], list = ids.map(id => PH_BY[id]).filter(Boolean);
   list.forEach(p => { ex.push(Object.assign(exHear(p, true), {stage: 'listen'})); ex.push(exIntroPh(p.id)); });
   ex.push(...stamp(shuffle(list).map(p => p.w === 'staff' ? exHear(p) : exMeaning(p)), 'practice'));
   ex.push(...stamp(shuffle(list).filter(p => p.w !== 'staff').map(p => canTile(p) ? exTiles(p) : exJp(p)), 'practice'));
-  ex.push(...stamp(list.filter(p => p.w !== 'staff').slice(0, 3).map(p => exSpeak(p)), 'practice'));
+  ex.push(...stamp(list.filter(p => p.w !== 'staff').slice(0, 3).map(p => exSpeak(p, undefined, true)), 'practice'));
   if (list.length >= 3) ex.push(...stamp([exMatchPh(pick(list, 5))], 'practice'));
   return ex;
 }
-const phraseCheck = ids => stamp(ids.map(id => PH_BY[id]).filter(Boolean).map(p => p.w === 'staff' ? exHear(p) : shortPh(p) ? exWriteKo(p, 'p:' + p.id) : exTiles(p)), 'check');
+const phraseCheck = ids => stamp(ids.map(id => PH_BY[id]).filter(Boolean).map((p, j) => p.w === 'staff' || j % 2 ? exHear(p) : exJp(p)), 'check');
 function rpSteps(key) {
   const keys = key === 'ALL' ? ['konbini', 'train', 'restaurant', 'pharmacy', 'stay'] : [key];
   return keys.flatMap(k => RP[k].steps.map((s, j) => ({t: 'dialog', stage: 'practice', s, who: 'staff', scene: j === 0 ? RP[k].name : ''})));
@@ -248,8 +252,7 @@ function grammarSet(ch, part) {
   const pts = part === 2 ? g.pts.slice(half) : g.pts.slice(0, half);
   const dr = part === 2 ? g.dr : g.dr.slice(0, Math.ceil(g.dr.length / 2)), bl = part === 2 ? g.bl : g.bl.slice(0, Math.ceil(g.bl.length / 2));
   const teach = [...pts.map(exRule), ...bl.map(b => exBlank(b, 'practice')), ...stamp(dr.map(d => exTiles(d, '')), 'practice')];
-  const short = dr.filter(d => flat(d.k).length <= 10);
-  const check = [...bl.map(b => exBlank(b, 'check')), ...stamp(pick(short, 2).map(d => exWriteKo(d, '')), 'check'), ...stamp(pick(dr.filter(d => !short.includes(d)), 2).map(d => exTiles(d, '')), 'check')];
+  const check = [...bl.map(b => exBlank(b, 'check')), ...stamp(pick(dr, 3).map(d => exTiles(d, '')), 'check')];
   return {pts, teach, check};
 }
 function readingPractice() {
@@ -264,17 +267,30 @@ function readingPractice() {
 /* ---------- reviewing: harder forms as a card matures ---------- */
 function recallItem(id) {
   const t = id[0], v = id.slice(2);
-  if (t === 'k') { const r = Math.random(); return r < .34 && canDraw(v) ? exDraw(v, true) : r < .67 ? exTypeReading(v) : exDictate(v, id); }
+  if (t === 'k') { const r = Math.random(); return r < .34 && canDraw(v) ? exDraw(v, 'recall') : r < .67 ? exTypeReading(v) : exDictate(v, id); }
   if (t === 'p') { const p = PH_BY[v]; if (p.w === 'staff') return exHear(p); return shortPh(p) ? exWriteKo(p, id) : Math.random() < .5 ? exTiles(p) : exSpeak(p); }
   if (t === 's') return exSign(+v);
   if (t === 'c') { const c = S.custom.find(x => x.id === v); return c ? {t: 'speak', c, srs: id} : null; }
   return null;
 }
+/* Exercise by card level: recognise → guided production → free recall. A wrong answer drops the card to box 0. */
 function reviewItem(id) {
-  const t = id[0], v = id.slice(2), b = (S.cards[id] || {}).b || 0;
-  if (b >= 2) return recallItem(id);
-  if (t === 'k') return b ? exListenKana(v, kanaPool(v)) : exRead(v, kanaPool(v));
-  if (t === 'p') { const p = PH_BY[v]; if (p.w === 'staff') return exHear(p); return b ? (canTile(p) ? exTiles(p) : exJp(p)) : exMeaning(p); }
+  const t = id[0], v = id.slice(2), b = (S.cards[id] || {}).b || 0, coin = Math.random() < .5;
+  if (t === 'k') {
+    if (!KANA_INFO[v]) return b >= 2 ? exDictate(v, id) : exListenKana(v, kanaPool(v));
+    if (b === 0) return coin ? exRead(v, kanaPool(v)) : exListenKana(v, kanaPool(v));
+    if (b === 1) return coin && canDraw(v) ? exDraw(v, 'flash') : exTypeReading(v);
+    if (b === 2) return coin && canDraw(v) ? exDraw(v, 'recall') : exDictate(v, id);
+    return recallItem(id);
+  }
+  if (t === 'p') {
+    const p = PH_BY[v]; if (!p) return null;
+    if (p.w === 'staff') return exHear(p);
+    if (b === 0) return coin ? exMeaning(p) : exHear(p);
+    if (b === 1) return coin ? exJp(p) : exSpeak(p, id, true);
+    if (b === 2) return coin && canTile(p) ? exTiles(p) : exSpeak(p, id);
+    return recallItem(id);
+  }
   return recallItem(id);
 }
 const REVIEW_CAP = 60;
@@ -288,7 +304,7 @@ function reviewQueue(extraIds = []) {
 const reviewItems = extraIds => stamp(reviewQueue(extraIds).map(reviewItem), 'review');
 function quizFor(i) {
   if (i <= 0) return [];
-  return stamp(pick(dayItems(i - 1).filter(id => S.cards[id]), 5).map(recallItem), 'quiz');
+  return stamp(pick(dayItems(i - 1).filter(id => S.cards[id]), 5).map(reviewItem).filter(Boolean), 'quiz');
 }
 
 /* ---------- what each set is ---------- */
@@ -346,6 +362,7 @@ function goalLines(i, n) {
   if (info.kind === 'pairs') L.push('장음, 촉음, 탁음이 다른 단어를 듣고 구별하기');
   return L;
 }
+const exWrap = (i, n) => ({t: 'wrap', stage: 'wrap', i, n});
 const checkIntro = () => exStage('check', '확인 테스트', '힌트 없이 풀어요. 80%를 넘으면 세트 통과예요. 못 넘으면 틀린 것만 다시 보고 한 번 더 풀어요.');
 function setLesson(i, n) {
   const d = DAYS[i], info = setInfo(i, n);
@@ -354,7 +371,9 @@ function setLesson(i, n) {
   if (info.kind === 'review') {
     const items = reviewItems([...dayItems(i), ...(i > 0 ? dayItems(i - 1) : [])]);
     if (d.test) { const wk = DAYS.map((x, j) => x.w === d.w && j < i ? j : -1).filter(j => j >= 0).flatMap(dayItems).filter(id => S.cards[id]); items.push(...stamp(pick(wk, 12).map(recallItem), 'review')); }
-    return {items: items.length ? [goal, ...items] : [], mastery: false};
+    const chk = d.test ? [] : todayCheck(i);
+    const all = [...(chk.length ? [checkIntro(), ...chk] : []), ...(chk.length ? items.slice(0, Math.max(15, 45 - chk.length)) : items)];
+    return {items: all.length ? [goal, ...all] : [], mastery: chk.length > 0};
   }
   if (info.kind === 'talk') return {items: [goal, ...chatSteps(d.talk)], mastery: false};
   if (info.kind === 'pairs') return {items: [goal, ...stamp(pairSet(null, 12), 'practice')], mastery: false};
@@ -362,17 +381,28 @@ function setLesson(i, n) {
     const list = (info.kind === 'core' ? CORE30 : ['tr1', 'tr2', 'tr3', 'tr4', 'tr5', 'tr6', 'b9', 'b12', 'b13']).map(id => PH_BY[id]);
     return {items: [goal, ...stamp([...pick(list, 8).map(p => exSpeak(p)), exMatchPh(pick(list, 5))], 'practice'), checkIntro(), ...phraseCheck(pick(list, 8).map(p => p.id))], mastery: true};
   }
-  const quiz = quizFor(i), teach = [], check = [];
+  const B = buildSet(i, n);
+  return {items: [...quizFor(i), goal, ...B.book, ...B.teach, exWrap(i, n)], mastery: false};
+}
+/* Sets 1 and 2 teach; their check tests run in the evening set 3, after a gap */
+function todayCheck(i) {
+  const date = dateOfIdx(i), out = [];
+  [1, 2].forEach(n => { if (setStat(date, n) === 'done') out.push(...buildSet(i, n).check); });
+  return out.filter(ex => !ex.srs || S.cards[ex.srs]);
+}
+function buildSet(i, n) {
+  const d = DAYS[i], teach = [], check = [];
+  if (!d || d.test || d.last) return {book: [], teach, check};
   if (n === 1) {
     const s1 = d.s1, bp = bookPart(i);
     if (s1.kana) { teach.push(...kanaTeach(s1.kana)); check.push(...kanaCheck(s1.kana)); }
     if (s1.confuse) { const prs = CONFUSE.find(c => c.set === s1.confuse).pairs; teach.push(...stamp(prs.map(exLookAlike), 'practice')); check.push(...stamp(pick(prs, 4).map(p => exTypeReading(p[Math.random() < .5 ? 0 : 1])), 'check')); }
-    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 16).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true), ...pick(HIRA_ALL, 8).map(k => exDraw(k, true))], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14))); }
+    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 16).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true), ...pick(HIRA_ALL, 8).map(k => exDraw(k, 'recall'))], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14), true)); }
     if (s1.rules === 'long') {
       teach.push(...RULE_CARDS.long.map(exRule), ...stamp([...pairSet('장음', 3), ...pairSet('촉음', 2), ...pick(W2WORDS.filter(w => /[っうい]/.test(w)), 5).map(exWord)], 'practice'));
       check.push(...stamp(pick(W2WORDS.filter(w => /[っうい]/.test(w) && w.length <= 6), 5).map(w => exDictate(w, '', '')), 'check'));
     }
-    if (s1.rules === 'loan') teach.push(...stamp(pick(KATA_ALL.filter(canDraw), 8).map(k => exDraw(k, true)), 'practice'));
+    if (s1.rules === 'loan') teach.push(...stamp(pick(KATA_ALL.filter(canDraw), 8).map(k => exDraw(k, 'recall')), 'practice'));
     if (s1.rules === 'loan') {
       teach.push(...RULE_CARDS.loan.map(exRule), ...stamp([...pick(MENU, 6).map(m => exMenu(m)), ...pick(MENU, 3).map(m => exMenu(m, true))], 'practice'));
       check.push(...stamp(pick(MENU.filter(m => m[0].length <= 5), 5).map(m => exDictate(m[0], '', m[1])), 'check'));
@@ -381,7 +411,7 @@ function setLesson(i, n) {
     else if (!teach.length) teach.push(...readingPractice());
     const lec = lectureOf(i);
     const book = lec && bp ? [exLecture(lec, bp)] : bp ? [exBook(bp, bp.ch ? 10 : 5)] : [];
-    return {items: [...quiz, goal, ...book, ...teach, ...(check.length ? [checkIntro(), ...check] : [])], mastery: check.length > 0};
+    return {book, teach, check};
   }
   const s2 = d.s2;
   if (s2.ph) { teach.push(...phraseTeach(s2.ph)); check.push(...phraseCheck(s2.ph)); }
@@ -397,7 +427,7 @@ function setLesson(i, n) {
     teach.push(...stamp(extra.map(p => p.w === 'staff' ? exHear(p) : Math.random() < .5 ? exJp(p) : exMeaning(p)), 'practice'));
     if (check.length < 3) check.push(...phraseCheck(pick(extra.filter(p => p.w !== 'staff'), 4 - Math.min(check.length, 2)).map(p => p.id)));
   }
-  return {items: [...quiz, goal, ...teach, ...(check.length ? [checkIntro(), ...check] : [])], mastery: check.length > 0};
+  return {book: [], teach, check};
 }
 function setContents(i, n) {
   const d = DAYS[i], info = setInfo(i, n), rows = [];
@@ -430,7 +460,8 @@ function setContents(i, n) {
     if (s2.hanja) rows.push({icon: 'han', col: COL.brown, t: '한자어 읽기 규칙', s: s2.hanja === 1 ? '받침 ㄱ, ㄴ, ㅁ, ㅇ' : '받침 ㄹ, ㅂ과 첫소리 ㅎ'});
     if (s2.signs) rows.push({icon: 'sign', col: COL.gray, t: `간판 한자 ${s2.signs[1] - s2.signs[0]}개`, s: `<span lang="ja">${SIGNS.slice(s2.signs[0], s2.signs[1]).map(x => x[0]).join(' ')}</span>`});
   }
-  if (['s1', 's2', 'core', 'sos'].includes(info.kind)) rows.push({icon: 'check', col: COL.green, t: '확인 테스트', s: '80%를 넘어야 통과예요'});
+  if (['s1', 's2'].includes(info.kind)) rows.push({icon: 'check', col: COL.green, t: '정리', s: '배운 걸 모아 보고 끝내요. 확인 테스트는 저녁 세트 3에서 봐요'});
+  if (['core', 'sos'].includes(info.kind) || (info.kind === 'review' && !d.test)) rows.push({icon: 'check', col: COL.green, t: '확인 테스트', s: info.kind === 'review' ? '오늘 세트 1·2에서 배운 것. 80%를 넘어야 통과예요' : '80%를 넘어야 통과예요'});
   if (info.kind === 's1' || info.kind === 's2') rows.push({icon: 'doc', col: COL.gray, t: '숙제', s: '손으로 쓰는 시트, 끝난 화면에서 받아요'});
   return rows;
 }

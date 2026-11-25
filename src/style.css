@@ -609,3 +609,8 @@ html.wsmode #app{max-width:none;padding:0}
 .srbox{display:flex;flex-direction:column;align-items:center;gap:6px;margin:6px 0}
 .srout{text-align:center;min-height:1.2em}
 .srout b{font-size:18px;color:var(--label)}
+.dsvg .model.flash{opacity:0;transition:opacity .2s}
+.dsvg .model.flash.show{opacity:1}
+.dsvg .model.flash path{stroke:var(--label);opacity:.85}
+.phcard.bare{background:none;padding:0;box-shadow:none}
+@media (prefers-reduced-motion:reduce){.dsvg .model.flash{transition:none}}
