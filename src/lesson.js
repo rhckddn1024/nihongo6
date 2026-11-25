@@ -391,7 +391,7 @@ function setLesson(i, n) {
   const goal = exGoal(goalLines(i, n), info.name);
   if (info.kind === 'review') {
     const items = reviewItems([...dayItems(i), ...(i > 0 ? dayItems(i - 1) : [])]);
-    if (d.test) { const wk = DAYS.map((x, j) => x.w === d.w && j < i ? j : -1).filter(j => j >= 0).flatMap(dayItems).filter(id => S.cards[id]); items.push(...stamp(pick(wk, 12).map(recallItem), 'review')); }
+    if (d.test) { const wk = DAYS.map((x, j) => x.w === d.w && j < i ? j : -1).filter(j => j >= 0).flatMap(dayItems).filter(id => S.cards[id]); items.push(...stamp(pick(wk, 12).map(reviewItem).filter(Boolean), 'review')); items.splice(48); }
     const chk = d.test ? [] : todayCheck(i);
     const all = [...(chk.length ? [checkIntro(), ...chk] : []), ...(chk.length ? items.slice(0, Math.max(15, 45 - chk.length)) : items)];
     return {items: all.length ? [goal, ...all] : [], mastery: chk.length > 0};
