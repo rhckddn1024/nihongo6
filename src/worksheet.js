@@ -31,7 +31,7 @@ function worksheetFor(i) {
   if (!d.test) {
     if (d.s1.kana) {
       const kanaList = d.s1.kana.every(k => YOON_ALL.includes(k) || DAKU_ALL.includes(k)) ? spick(d.s1.kana, 10, r) : d.s1.kana;
-      sec.push({kind: 'trace', title: '따라 쓰기', note: '회색 글자를 덧쓰고 나머지 칸은 혼자 써요. 쓸 때마다 소리 내서 읽어요.', items: kanaList});
+      sec.push({kind: 'trace', title: '따라 쓰기', note: '회색 글자를 덧쓰고, 다음 세 칸은 보고 써요. 회색 바탕 세 칸은 왼쪽을 손으로 가리고 떠올려서 써요. 쓸 때마다 소리 내서 읽어요.', items: kanaList});
       sec.push({kind: 'dict', title: '받아쓰기', note: '앱 숙제 화면에서 받아쓰기를 틀고 들리는 글자를 적어요.', items: spick([...d.s1.kana, ...spick(known.filter(k => !d.s1.kana.includes(k)), 3, r)], 8, r).map(k => ({play: k, ans: k}))});
     }
     if (d.s1.drill) sec.push({kind: 'table', title: '히라가나 50음도', note: '칸 구석의 한글 발음을 보고 글자를 적어요.', set: 'hira'});
@@ -72,7 +72,7 @@ const dictItems = ws => ws.sec.filter(s => s.kind === 'dict').flatMap(s => s.ite
 
 /* ---------- printable HTML ---------- */
 function traceRow(k) {
-  return `<div class="wtr"><div class="wm"><span lang="ja">${k}</span>${STROKES[k] ? strokeSVG(k, 'ws') : ''}</div><div class="wc g"><span lang="ja">${k}</span></div><div class="wc g2"><span lang="ja">${k}</span></div>${'<div class="wc"></div>'.repeat(6)}</div>`;
+  return `<div class="wtr"><div class="wm"><span lang="ja">${k}</span>${STROKES[k] ? strokeSVG(k, 'ws') : ''}</div><div class="wc g"><span lang="ja">${k}</span></div><div class="wc g2"><span lang="ja">${k}</span></div>${'<div class="wc"></div>'.repeat(3)}${'<div class="wc hide"></div>'.repeat(3)}</div>`;
 }
 function tableHTML(set) {
   const rows = set === 'kata' ? KATA_ROWS : HIRA_ROWS;

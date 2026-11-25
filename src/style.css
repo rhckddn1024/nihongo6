@@ -538,6 +538,8 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .wc,.wt{width:15mm;height:15mm;border:.6pt solid #999;position:relative;flex:none;background-image:linear-gradient(#ddd,#ddd),linear-gradient(#ddd,#ddd);background-size:100% .4pt,.4pt 100%;background-position:center,center;background-repeat:no-repeat}
 .wc span{position:absolute;inset:0;display:grid;place-items:center;font-size:30pt;color:#c4c4c4;font-family:var(--font-ja)}
 .wc.g2 span{color:#e4e4e4}
+.wc.hide{background-color:#f1f1f1}
+.wc.hide:nth-last-child(3){margin-left:2.5mm}
 .wtable{display:grid;grid-template-columns:repeat(10,15mm);gap:1.2mm;justify-content:center}
 .wt{width:auto}
 .wt small{position:absolute;top:.4mm;left:1mm;font-size:7pt;color:#888}
@@ -589,3 +591,21 @@ html.wsmode #app{max-width:none;padding:0}
   .strokes.anim .paths path{stroke-dashoffset:0!important}
   .caret{animation:none}
 }
+
+/* handwriting */
+.dq{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 0 12px}
+.dqk{font-size:30px}.dqh{font-size:28px;font-weight:700}
+.dpad{width:min(76vw,300px);aspect-ratio:1;margin:0 auto;border-radius:18px;background:var(--card2);border:1px solid var(--sep)}
+.dsvg{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none}
+.dsvg path,.dsvg polyline{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dsvg .guide path{stroke:var(--sep);stroke-width:.7;stroke-dasharray:2.5 2.5}
+.dsvg .model path{stroke:var(--label3);stroke-width:5;opacity:.35}
+.dsvg .dok path{stroke:var(--label);stroke-width:5}
+.dsvg .ink{stroke:var(--tint);stroke-width:5}
+.dsvg .hint path{stroke:var(--orange);stroke-width:5;opacity:.85}
+.dsvg .hint circle{fill:var(--orange)}
+.dbar{display:flex;align-items:center;justify-content:space-between;width:min(76vw,300px);margin:12px auto 0}
+.dcount{font-size:15px;color:var(--label2)}
+.srbox{display:flex;flex-direction:column;align-items:center;gap:6px;margin:6px 0}
+.srout{text-align:center;min-height:1.2em}
+.srout b{font-size:18px;color:var(--label)}

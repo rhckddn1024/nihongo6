@@ -89,6 +89,8 @@ function exLookAlike(pair) {
     opts: shuffle([a, b, ...others]).map(x => ({h: `<b>${esc(KANA_INFO[x].hg)}</b>`, v: x})), grid: true,
     ans: k, kana: k, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: `${jaSpan(a)} ${jaSpan(b)} 구별: ${esc(tip)}`};
 }
+const exDraw = (k, recall) => ({t: 'draw', k, recall, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
+const canDraw = k => !!(STROKES[k] && KANA_INFO[k]);
 const exTypeReading = k => ({t: 'type', mode: 'hangul', prompt: '한글로 어떻게 읽는지 적어요', q: `<div class="qkana" lang="ja">${k}</div>`, ans: KANA_INFO[k].hg, alt: [KANA_INFO[k].ro], say: k, kana: k, srs: 'k:' + k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
 const exDictate = (k, srs, ko) => ({t: 'type', mode: 'kana', prompt: ko ? '들은 말을 가나로 적어요' : '들은 소리를 가나로 적어요', audio: k, vary: !ko, ans: k, srs, kata: hasKata(clean(k)), say: k, hint: ko || '', ansLabel: `${jaSpan(clean(k))}${ko ? ' ' + esc(ko) : KANA_INFO[k] ? ' ' + esc(KANA_INFO[k].hg) : ''}`});
 const exWriteKo = (p, srs) => ({t: 'type', mode: 'kana', prompt: '일본어로 적어요', q: `<div class="qko">${esc(p.ko)}</div>`, ans: p.k, srs, kata: hasKata(clean(p.k)), say: p.k, ansLabel: jaSpan(clean(p.k)), fb: esc(toHangul(p.k))});
@@ -186,7 +188,7 @@ function kanaTeach(list) {
     const seen = [];
     chunks.forEach((c, ci) => {
       c.forEach(k => ex.push(exIntroKana(k)));
-      ex.push(...stamp([...c.map(k => exRead(k, pool)), ...shuffle(c).map(k => exListenKana(k, pool))], 'practice'));
+      ex.push(...stamp([...c.map(k => exRead(k, pool)), ...shuffle(c).map(k => exListenKana(k, pool)), ...c.filter(canDraw).map(k => exDraw(k, false))], 'practice'));
       seen.push(...c);
       if (ci % 2 === 1 && seen.length >= 4) ex.push(...stamp([exMatchKana(shuffle(seen.slice(-5)), ci % 4 === 3)], 'practice'));
     });
@@ -200,6 +202,7 @@ function kanaTeach(list) {
   if (rows.length > 1 && rows[rows.length - 1].length < 3) rows[rows.length - 2].push(...rows.pop());
   rows.forEach((r, ri) => {
     ex.push(exIntroRow(r));
+    if (kata) ex.push(...stamp(r.filter(canDraw).map(k => exDraw(k, false)), 'practice'));
     const tests = kata ? r : pick(r, Math.min(yoon ? 3 : 4, r.length));
     ex.push(...stamp(tests.map((k, j) => j % 2 ? exListenKana(k, pool) : exRead(k, pool)), 'practice'));
     if (ri % 2 === 1 || ri === rows.length - 1) ex.push(...stamp([exMatchKana(pick(r, Math.min(5, r.length)), ri % 2 === 1)], 'practice'));
@@ -208,7 +211,7 @@ function kanaTeach(list) {
 }
 function kanaCheck(list) {
   const items = list.length > 12 ? pick(list, 12) : shuffle(list);
-  return stamp(items.map((k, j) => j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
+  return stamp(items.map((k, j) => j % 3 === 2 && canDraw(k) ? exDraw(k, true) : j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
 }
 function phraseTeach(ids) {
   const ex = [], list = ids.map(id => PH_BY[id]).filter(Boolean);
@@ -261,7 +264,7 @@ function readingPractice() {
 /* ---------- reviewing: harder forms as a card matures ---------- */
 function recallItem(id) {
   const t = id[0], v = id.slice(2);
-  if (t === 'k') return Math.random() < .5 ? exTypeReading(v) : exDictate(v, id);
+  if (t === 'k') { const r = Math.random(); return r < .34 && canDraw(v) ? exDraw(v, true) : r < .67 ? exTypeReading(v) : exDictate(v, id); }
   if (t === 'p') { const p = PH_BY[v]; if (p.w === 'staff') return exHear(p); return shortPh(p) ? exWriteKo(p, id) : Math.random() < .5 ? exTiles(p) : exSpeak(p); }
   if (t === 's') return exSign(+v);
   if (t === 'c') { const c = S.custom.find(x => x.id === v); return c ? {t: 'speak', c, srs: id} : null; }
@@ -319,7 +322,7 @@ function goalLines(i, n) {
   if (info.kind === 's1') {
     if (d.s1.kana) L.push(`<span lang="ja">${d.s1.kana.slice(0, 13).join(' ')}${d.s1.kana.length > 13 ? ' …' : ''}</span> 보자마자 읽기`, '소리를 듣고 가나로 적기');
     if (d.s1.confuse) L.push('모양이 비슷한 글자 헷갈리지 않기');
-    if (d.s1.drill) L.push('히라가나 46자를 한 글자 2초 안에 읽기');
+    if (d.s1.drill) L.push('히라가나 46자를 한 글자 2초 안에 읽기', '소리만 듣고 손으로 쓰기');
     if (d.s1.rules === 'long') L.push('장음, 촉음, ん이 들어간 단어를 듣고 적기');
     if (d.s1.rules === 'loan') L.push('가타카나 메뉴를 읽고 뜻 알기');
     const bp = bookPart(i);
@@ -364,11 +367,12 @@ function setLesson(i, n) {
     const s1 = d.s1, bp = bookPart(i);
     if (s1.kana) { teach.push(...kanaTeach(s1.kana)); check.push(...kanaCheck(s1.kana)); }
     if (s1.confuse) { const prs = CONFUSE.find(c => c.set === s1.confuse).pairs; teach.push(...stamp(prs.map(exLookAlike), 'practice')); check.push(...stamp(pick(prs, 4).map(p => exTypeReading(p[Math.random() < .5 ? 0 : 1])), 'check')); }
-    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 20).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true)], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14))); }
+    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 16).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true), ...pick(HIRA_ALL, 8).map(k => exDraw(k, true))], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14))); }
     if (s1.rules === 'long') {
       teach.push(...RULE_CARDS.long.map(exRule), ...stamp([...pairSet('장음', 3), ...pairSet('촉음', 2), ...pick(W2WORDS.filter(w => /[っうい]/.test(w)), 5).map(exWord)], 'practice'));
       check.push(...stamp(pick(W2WORDS.filter(w => /[っうい]/.test(w) && w.length <= 6), 5).map(w => exDictate(w, '', '')), 'check'));
     }
+    if (s1.rules === 'loan') teach.push(...stamp(pick(KATA_ALL.filter(canDraw), 8).map(k => exDraw(k, true)), 'practice'));
     if (s1.rules === 'loan') {
       teach.push(...RULE_CARDS.loan.map(exRule), ...stamp([...pick(MENU, 6).map(m => exMenu(m)), ...pick(MENU, 3).map(m => exMenu(m, true))], 'practice'));
       check.push(...stamp(pick(MENU.filter(m => m[0].length <= 5), 5).map(m => exDictate(m[0], '', m[1])), 'check'));
@@ -412,7 +416,7 @@ function setContents(i, n) {
     else if (bp) rows.push({icon: 'book', col: COL.orange, t: `${bookLabel(bp)} ${bp.from}~${bp.to}쪽`, s: bp.ch ? '본문을 소리 내서 읽고 연습 문제까지 풀어요' : '오늘 글자 부분을 훑어봐요'});
     if (d.s1.kana) rows.push({icon: 'kana', col: COL.red, t: `새 글자 ${d.s1.kana.length}개`, s: `<span lang="ja">${d.s1.kana.slice(0, 12).join(' ')}${d.s1.kana.length > 12 ? ' …' : ''}</span>`});
     if (d.s1.confuse) rows.push({icon: 'kana', col: COL.purple, t: '헷갈리는 글자', s: '모양이 비슷한 글자 구별하기'});
-    if (d.s1.drill) rows.push({icon: 'bolt', col: COL.orange, t: '46자 빠르게 읽기', s: '한 글자에 2초 안쪽이 목표예요'});
+    if (d.s1.drill) rows.push({icon: 'bolt', col: COL.orange, t: '46자 빠르게 읽기', s: '한 글자에 2초 안쪽이 목표예요'}, {icon: 'pen', col: COL.indigo, t: '손가락으로 쓰기', s: '쓰기 테스트 전에 소리만 듣고 써 봐요'});
     if (d.s1.rules) rows.push({icon: 'doc', col: COL.indigo, t: d.s1.rules === 'long' ? '장음, 촉음, ん' : '외래어 읽기', s: '듣고 가나로 받아 적어요'});
     if (bp && bp.ch && GRAMMAR[bp.ch]) rows.push({icon: 'doc', col: COL.indigo, t: '문법', s: grammarSet(bp.ch, bp.part).pts.map(p => esc(p.title)).join(', ')});
   }

@@ -275,6 +275,58 @@ function keypad(host, opt) {
   return {get value() { return st.v; }, lock() { host.classList.add('locked'); }};
 }
 
+/* ---------- handwriting: stroke-by-stroke check against KanjiVG ---------- */
+const DRAW_N = 24;
+function samplePath(svg, d, n = DRAW_N) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', d); svg.appendChild(p);
+  const len = p.getTotalLength(), pts = [];
+  for (let i = 0; i < n; i++) { const q = p.getPointAtLength(len * i / (n - 1)); pts.push([q.x, q.y]); }
+  p.remove();
+  return {pts, len};
+}
+function resample(pts, n = DRAW_N) {
+  if (pts.length < 2) return Array.from({length: n}, () => pts[0] || [0, 0]);
+  const seg = [0];
+  for (let i = 1; i < pts.length; i++) seg.push(seg[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = seg[seg.length - 1] || 1, out = [];
+  let j = 1;
+  for (let i = 0; i < n; i++) {
+    const t = total * i / (n - 1);
+    while (j < seg.length - 1 && seg[j] < t) j++;
+    const a = pts[j - 1], b = pts[j], span = seg[j] - seg[j - 1] || 1, f = Math.min(1, Math.max(0, (t - seg[j - 1]) / span));
+    out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+  }
+  return out;
+}
+const meanDist = (a, b) => a.reduce((s, p, i) => s + Math.hypot(p[0] - b[i][0], p[1] - b[i][1]), 0) / a.length;
+function strokeOk(user, tpl) {
+  const u = resample(user), fwd = meanDist(u, tpl.pts), back = meanDist(u.slice().reverse(), tpl.pts);
+  const tol = tpl.len < 20 ? 14 : 18;
+  return fwd < tol && fwd <= back + 1.5 && Math.hypot(u[0][0] - tpl.pts[0][0], u[0][1] - tpl.pts[0][1]) < 26;
+}
+
+/* ---------- speech recognition (Chrome on Android uses Google's recognizer) ---------- */
+const SRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const normJa = x => kataToHira(String(x)).replace(/[\s、。，．,.!?！？・「」〜~_ー]/g, '');
+function levRatio(a, b) {
+  if (!a.length || !b.length) return 0;
+  const d = Array.from({length: b.length + 1}, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) { let prev = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; } }
+  return 1 - d[b.length] / Math.max(a.length, b.length);
+}
+let SR_ON = null;
+function listenJa(onDone) {
+  if (SR_ON) { try { SR_ON.abort(); } catch (e) {} }
+  const r = new SRec(); SR_ON = r;
+  r.lang = 'ja-JP'; r.interimResults = false; r.maxAlternatives = 5;
+  let got = false;
+  r.onresult = e => { got = true; onDone({alts: [...e.results[0]].map(a => a.transcript)}); };
+  r.onerror = e => { got = true; onDone({error: e.error}); };
+  r.onend = () => { SR_ON = null; if (!got) onDone({error: 'no-speech'}); };
+  r.start();
+}
+
 /* ---------- renderers ---------- */
 function wireAudio(body, text, opt = {}) {
   const play = $('[data-play]', body), slow = $('[data-slow]', body);
@@ -329,6 +381,47 @@ const RENDER = {
       <ol class="steps mt16"><li>선생님이 읽을 때 같이 소리 내서 읽어요</li><li>책에 없는 설명은 교재 여백에 적어요</li><li>${tsOf(l.to)}에서 멈추고 아래 버튼을 눌러요</li></ol>`;
     $('[data-bookinstead]', body).addEventListener('click', () => { LESSON.q[LESSON.i] = exBook(ex.bp, 10); showEx(); });
     return {kind: 'intro', label: '다 봤어요'};
+  },
+  draw(ex, body, api) {
+    const k = ex.k, info = KANA_INFO[k], paths = STROKES[k];
+    body.innerHTML = `<h2 class="lp">${ex.recall ? `소리를 듣고 ${isKata(k) ? '가타카나' : '히라가나'}로 써요` : '획순대로 따라 써요'}</h2>
+      <div class="dq">${ex.recall ? '' : `<span class="dqk" lang="ja">${k}</span>`}<span class="dqh">${esc(info.hg)}</span><button class="spk" data-say="${k}" aria-label="듣기">${IC.spk}</button></div>
+      <div class="dpad"><svg viewBox="0 0 109 109" class="dsvg" role="img" aria-label="글자를 쓰는 칸"><g class="guide"><path d="M54.5 3v103M3 54.5h103"/></g>${ex.recall ? '' : `<g class="model">${paths.map(d => `<path d="${d}"/>`).join('')}</g>`}<g class="dok"></g><g class="hint"></g><polyline class="ink" points=""/></svg></div>
+      <div class="dbar"><span class="dcount">1 / ${paths.length}획</span><button class="btn grey sm" data-giveup>${ex.recall ? '모르겠어요' : '다음 획 보기'}</button></div>`;
+    wireAudio(body);
+    if (ex.recall) autoPlay(ex, k);
+    const svg = $('.dsvg', body), ink = $('.ink', svg), doneG = $('.dok', svg), hintG = $('.hint', svg), cnt = $('.dcount', body);
+    const tpls = paths.map(d => samplePath(svg, d));
+    let j = 0, miss = 0, missHere = 0, cur = null, finished = false;
+    const toLocal = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 109, (e.clientY - r.top) / r.height * 109]; };
+    const hint = i => { hintG.innerHTML = `<path d="${paths[i]}"/><circle cx="${tpls[i].pts[0][0].toFixed(1)}" cy="${tpls[i].pts[0][1].toFixed(1)}" r="3.4"/>`; };
+    const end = gaveUp => {
+      finished = true; hintG.innerHTML = '';
+      const ok = !gaveUp && miss <= (ex.recall ? 1 : 2);
+      setTimeout(() => api.finish({ok, verdict: miss === 0 ? 'g' : ok ? 'o' : 'b', title: gaveUp ? '이렇게 써요' : miss === 0 ? '획순까지 맞게 썼어요' : ok ? `${miss}번 다시 썼어요` : '아직 손에 덜 익었어요', answer: ex.ansLabel, detail: ex.fb, say: k}), 300);
+    };
+    const advance = () => {
+      doneG.insertAdjacentHTML('beforeend', `<path d="${paths[j]}"/>`);
+      j++; missHere = 0; hintG.innerHTML = '';
+      if (j >= paths.length) end(false); else cnt.textContent = `${j + 1} / ${paths.length}획`;
+    };
+    svg.addEventListener('pointerdown', e => { if (finished || LESSON.phase !== 'ask') return; e.preventDefault(); try { svg.setPointerCapture(e.pointerId); } catch (x) {} cur = [toLocal(e)]; });
+    svg.addEventListener('pointermove', e => { if (!cur) return; cur.push(toLocal(e)); ink.setAttribute('points', cur.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')); });
+    svg.addEventListener('pointerup', () => {
+      if (!cur) return;
+      const pts = cur; cur = null; ink.setAttribute('points', '');
+      if (strokeOk(pts, tpls[j])) { haptic(8); advance(); return; }
+      miss++; missHere++; sfx('bad'); haptic(25); hint(j);
+      if (missHere >= 3) setTimeout(advance, 500);
+    });
+    svg.addEventListener('pointercancel', () => { cur = null; ink.setAttribute('points', ''); });
+    $('[data-giveup]', body).addEventListener('click', () => {
+      if (finished) return;
+      if (!ex.recall) { hint(j); return; }
+      doneG.innerHTML = paths.map(d => `<path d="${d}"/>`).join('');
+      end(true);
+    });
+    return 'auto';
   },
   introKana(ex, body) {
     const k = KANA_INFO[ex.k];
@@ -464,6 +557,7 @@ const RENDER = {
     const rec = canRecord();
     body.innerHTML = `<h2 class="lp">소리 내서 말해 봐요</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>
       ${rec ? `<div class="recbox"><button class="mic" data-rec aria-label="녹음">${IC.mic}</button><span class="recst tiny">녹음 버튼을 누르고 말한 다음 다시 눌러요</span></div>` : '<p class="lhint">입으로 다 말한 다음 정답을 확인해요</p>'}
+      ${SRec ? `<div class="srbox"><button class="btn soft sm" data-sr>${IC.ear} 알아듣는지 확인</button><p class="srout tiny" aria-live="polite"></p></div>` : ''}
       <div class="reveal" hidden><div class="phcard"><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span>${p && p.c ? `<div class="pcas"><span class="tag cas">친구끼리</span><span lang="ja">${esc(p.c)}</span></div>` : ''}
         <div class="cmpbtns"><button class="btn soft sm" data-say="${esc(read)}">${IC.spk} 원래 발음</button>${rec ? `<button class="btn grey sm" data-mine hidden>${IC.play} 내 목소리</button>` : ''}</div></div>
         <p class="lhint" data-cmp></p></div>`;
@@ -478,6 +572,17 @@ const RENDER = {
       } catch (e) { stEl.textContent = '마이크를 쓸 수 없어요. 소리 내서 말한 다음 정답을 봐요'; mic.disabled = true; }
     });
     if (mine) mine.addEventListener('click', playMine);
+    const srb = $('[data-sr]', body), sro = $('.srout', body);
+    if (srb) srb.addEventListener('click', () => {
+      if (REC.mr) recStop();
+      stopSpeech(); srb.disabled = true; sro.textContent = '듣고 있어요. 일본어로 말해 봐요';
+      listenJa(res => {
+        srb.disabled = false;
+        if (res.error) { sro.textContent = res.error === 'not-allowed' || res.error === 'service-not-allowed' ? '마이크 권한이 필요해요' : res.error === 'no-speech' ? '소리가 안 들렸어요. 다시 해 봐요' : '지금은 음성 인식을 쓸 수 없어요'; return; }
+        const target = normJa(clean(read)), best = Math.max(...res.alts.map(a => levRatio(normJa(a), target)));
+        sro.innerHTML = `이렇게 들렸어요: <b lang="ja">${esc(res.alts[0])}</b><br>${best >= .85 ? '목표 문장과 거의 똑같이 들렸어요' : best >= .6 ? '비슷해요. 정답을 보고 다른 곳을 찾아봐요' : '다르게 들렸어요. 한자로 바뀌어 나왔다면 맞았을 수도 있어요'}`;
+      });
+    });
     api.setCheck(() => { recStop(); $('[data-cmp]', body).textContent = REC.url ? '두 소리를 번갈아 들어 보고, 맞게 말했는지 골라요' : '원래 발음을 듣고, 내가 말한 소리와 같았는지 골라요'; $('.reveal', body).hidden = false; const rb = $('.recbox', body); if (rb) rb.hidden = true; setTimeout(() => speak(read), 200); return {selfRate: true}; });
     return 'speak';
   },

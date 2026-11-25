@@ -554,6 +554,8 @@ textarea.field{min-height:120px;resize:vertical;line-height:1.5}
 .wc,.wt{width:15mm;height:15mm;border:.6pt solid #999;position:relative;flex:none;background-image:linear-gradient(#ddd,#ddd),linear-gradient(#ddd,#ddd);background-size:100% .4pt,.4pt 100%;background-position:center,center;background-repeat:no-repeat}
 .wc span{position:absolute;inset:0;display:grid;place-items:center;font-size:30pt;color:#c4c4c4;font-family:var(--font-ja)}
 .wc.g2 span{color:#e4e4e4}
+.wc.hide{background-color:#f1f1f1}
+.wc.hide:nth-last-child(3){margin-left:2.5mm}
 .wtable{display:grid;grid-template-columns:repeat(10,15mm);gap:1.2mm;justify-content:center}
 .wt{width:auto}
 .wt small{position:absolute;top:.4mm;left:1mm;font-size:7pt;color:#888}
@@ -605,6 +607,24 @@ html.wsmode #app{max-width:none;padding:0}
   .strokes.anim .paths path{stroke-dashoffset:0!important}
   .caret{animation:none}
 }
+
+/* handwriting */
+.dq{display:flex;align-items:center;justify-content:center;gap:12px;margin:0 0 12px}
+.dqk{font-size:30px}.dqh{font-size:28px;font-weight:700}
+.dpad{width:min(76vw,300px);aspect-ratio:1;margin:0 auto;border-radius:18px;background:var(--card2);border:1px solid var(--sep)}
+.dsvg{display:block;width:100%;height:100%;touch-action:none;-webkit-user-select:none;user-select:none}
+.dsvg path,.dsvg polyline{fill:none;stroke-linecap:round;stroke-linejoin:round}
+.dsvg .guide path{stroke:var(--sep);stroke-width:.7;stroke-dasharray:2.5 2.5}
+.dsvg .model path{stroke:var(--label3);stroke-width:5;opacity:.35}
+.dsvg .dok path{stroke:var(--label);stroke-width:5}
+.dsvg .ink{stroke:var(--tint);stroke-width:5}
+.dsvg .hint path{stroke:var(--orange);stroke-width:5;opacity:.85}
+.dsvg .hint circle{fill:var(--orange)}
+.dbar{display:flex;align-items:center;justify-content:space-between;width:min(76vw,300px);margin:12px auto 0}
+.dcount{font-size:15px;color:var(--label2)}
+.srbox{display:flex;flex-direction:column;align-items:center;gap:6px;margin:6px 0}
+.srout{text-align:center;min-height:1.2em}
+.srout b{font-size:18px;color:var(--label)}
 
 </style>
 </head>
@@ -1670,6 +1690,8 @@ function exLookAlike(pair) {
     opts: shuffle([a, b, ...others]).map(x => ({h: `<b>${esc(KANA_INFO[x].hg)}</b>`, v: x})), grid: true,
     ans: k, kana: k, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: `${jaSpan(a)} ${jaSpan(b)} 구별: ${esc(tip)}`};
 }
+const exDraw = (k, recall) => ({t: 'draw', k, recall, srs: 'k:' + k, say: k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
+const canDraw = k => !!(STROKES[k] && KANA_INFO[k]);
 const exTypeReading = k => ({t: 'type', mode: 'hangul', prompt: '한글로 어떻게 읽는지 적어요', q: `<div class="qkana" lang="ja">${k}</div>`, ans: KANA_INFO[k].hg, alt: [KANA_INFO[k].ro], say: k, kana: k, srs: 'k:' + k, ansLabel: `${jaSpan(k)} ${esc(KANA_INFO[k].hg)}`, fb: KANA_INFO[k].mn ? esc(KANA_INFO[k].mn) : ''});
 const exDictate = (k, srs, ko) => ({t: 'type', mode: 'kana', prompt: ko ? '들은 말을 가나로 적어요' : '들은 소리를 가나로 적어요', audio: k, vary: !ko, ans: k, srs, kata: hasKata(clean(k)), say: k, hint: ko || '', ansLabel: `${jaSpan(clean(k))}${ko ? ' ' + esc(ko) : KANA_INFO[k] ? ' ' + esc(KANA_INFO[k].hg) : ''}`});
 const exWriteKo = (p, srs) => ({t: 'type', mode: 'kana', prompt: '일본어로 적어요', q: `<div class="qko">${esc(p.ko)}</div>`, ans: p.k, srs, kata: hasKata(clean(p.k)), say: p.k, ansLabel: jaSpan(clean(p.k)), fb: esc(toHangul(p.k))});
@@ -1767,7 +1789,7 @@ function kanaTeach(list) {
     const seen = [];
     chunks.forEach((c, ci) => {
       c.forEach(k => ex.push(exIntroKana(k)));
-      ex.push(...stamp([...c.map(k => exRead(k, pool)), ...shuffle(c).map(k => exListenKana(k, pool))], 'practice'));
+      ex.push(...stamp([...c.map(k => exRead(k, pool)), ...shuffle(c).map(k => exListenKana(k, pool)), ...c.filter(canDraw).map(k => exDraw(k, false))], 'practice'));
       seen.push(...c);
       if (ci % 2 === 1 && seen.length >= 4) ex.push(...stamp([exMatchKana(shuffle(seen.slice(-5)), ci % 4 === 3)], 'practice'));
     });
@@ -1781,6 +1803,7 @@ function kanaTeach(list) {
   if (rows.length > 1 && rows[rows.length - 1].length < 3) rows[rows.length - 2].push(...rows.pop());
   rows.forEach((r, ri) => {
     ex.push(exIntroRow(r));
+    if (kata) ex.push(...stamp(r.filter(canDraw).map(k => exDraw(k, false)), 'practice'));
     const tests = kata ? r : pick(r, Math.min(yoon ? 3 : 4, r.length));
     ex.push(...stamp(tests.map((k, j) => j % 2 ? exListenKana(k, pool) : exRead(k, pool)), 'practice'));
     if (ri % 2 === 1 || ri === rows.length - 1) ex.push(...stamp([exMatchKana(pick(r, Math.min(5, r.length)), ri % 2 === 1)], 'practice'));
@@ -1789,7 +1812,7 @@ function kanaTeach(list) {
 }
 function kanaCheck(list) {
   const items = list.length > 12 ? pick(list, 12) : shuffle(list);
-  return stamp(items.map((k, j) => j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
+  return stamp(items.map((k, j) => j % 3 === 2 && canDraw(k) ? exDraw(k, true) : j % 2 ? exDictate(k, 'k:' + k) : exTypeReading(k)), 'check');
 }
 function phraseTeach(ids) {
   const ex = [], list = ids.map(id => PH_BY[id]).filter(Boolean);
@@ -1842,7 +1865,7 @@ function readingPractice() {
 /* ---------- reviewing: harder forms as a card matures ---------- */
 function recallItem(id) {
   const t = id[0], v = id.slice(2);
-  if (t === 'k') return Math.random() < .5 ? exTypeReading(v) : exDictate(v, id);
+  if (t === 'k') { const r = Math.random(); return r < .34 && canDraw(v) ? exDraw(v, true) : r < .67 ? exTypeReading(v) : exDictate(v, id); }
   if (t === 'p') { const p = PH_BY[v]; if (p.w === 'staff') return exHear(p); return shortPh(p) ? exWriteKo(p, id) : Math.random() < .5 ? exTiles(p) : exSpeak(p); }
   if (t === 's') return exSign(+v);
   if (t === 'c') { const c = S.custom.find(x => x.id === v); return c ? {t: 'speak', c, srs: id} : null; }
@@ -1900,7 +1923,7 @@ function goalLines(i, n) {
   if (info.kind === 's1') {
     if (d.s1.kana) L.push(`<span lang="ja">${d.s1.kana.slice(0, 13).join(' ')}${d.s1.kana.length > 13 ? ' …' : ''}</span> 보자마자 읽기`, '소리를 듣고 가나로 적기');
     if (d.s1.confuse) L.push('모양이 비슷한 글자 헷갈리지 않기');
-    if (d.s1.drill) L.push('히라가나 46자를 한 글자 2초 안에 읽기');
+    if (d.s1.drill) L.push('히라가나 46자를 한 글자 2초 안에 읽기', '소리만 듣고 손으로 쓰기');
     if (d.s1.rules === 'long') L.push('장음, 촉음, ん이 들어간 단어를 듣고 적기');
     if (d.s1.rules === 'loan') L.push('가타카나 메뉴를 읽고 뜻 알기');
     const bp = bookPart(i);
@@ -1945,11 +1968,12 @@ function setLesson(i, n) {
     const s1 = d.s1, bp = bookPart(i);
     if (s1.kana) { teach.push(...kanaTeach(s1.kana)); check.push(...kanaCheck(s1.kana)); }
     if (s1.confuse) { const prs = CONFUSE.find(c => c.set === s1.confuse).pairs; teach.push(...stamp(prs.map(exLookAlike), 'practice')); check.push(...stamp(pick(prs, 4).map(p => exTypeReading(p[Math.random() < .5 ? 0 : 1])), 'check')); }
-    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 20).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true)], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14))); }
+    if (s1.drill) { teach.push(...stamp([...pick(HIRA_ALL, 16).map(k => exRead(k, HIRA_ALL, true)), exMatchKana(pick(HIRA_ALL, 8), true), ...pick(HIRA_ALL, 8).map(k => exDraw(k, true))], 'practice')); check.push(...kanaCheck(pick(HIRA_ALL, 14))); }
     if (s1.rules === 'long') {
       teach.push(...RULE_CARDS.long.map(exRule), ...stamp([...pairSet('장음', 3), ...pairSet('촉음', 2), ...pick(W2WORDS.filter(w => /[っうい]/.test(w)), 5).map(exWord)], 'practice'));
       check.push(...stamp(pick(W2WORDS.filter(w => /[っうい]/.test(w) && w.length <= 6), 5).map(w => exDictate(w, '', '')), 'check'));
     }
+    if (s1.rules === 'loan') teach.push(...stamp(pick(KATA_ALL.filter(canDraw), 8).map(k => exDraw(k, true)), 'practice'));
     if (s1.rules === 'loan') {
       teach.push(...RULE_CARDS.loan.map(exRule), ...stamp([...pick(MENU, 6).map(m => exMenu(m)), ...pick(MENU, 3).map(m => exMenu(m, true))], 'practice'));
       check.push(...stamp(pick(MENU.filter(m => m[0].length <= 5), 5).map(m => exDictate(m[0], '', m[1])), 'check'));
@@ -1993,7 +2017,7 @@ function setContents(i, n) {
     else if (bp) rows.push({icon: 'book', col: COL.orange, t: `${bookLabel(bp)} ${bp.from}~${bp.to}쪽`, s: bp.ch ? '본문을 소리 내서 읽고 연습 문제까지 풀어요' : '오늘 글자 부분을 훑어봐요'});
     if (d.s1.kana) rows.push({icon: 'kana', col: COL.red, t: `새 글자 ${d.s1.kana.length}개`, s: `<span lang="ja">${d.s1.kana.slice(0, 12).join(' ')}${d.s1.kana.length > 12 ? ' …' : ''}</span>`});
     if (d.s1.confuse) rows.push({icon: 'kana', col: COL.purple, t: '헷갈리는 글자', s: '모양이 비슷한 글자 구별하기'});
-    if (d.s1.drill) rows.push({icon: 'bolt', col: COL.orange, t: '46자 빠르게 읽기', s: '한 글자에 2초 안쪽이 목표예요'});
+    if (d.s1.drill) rows.push({icon: 'bolt', col: COL.orange, t: '46자 빠르게 읽기', s: '한 글자에 2초 안쪽이 목표예요'}, {icon: 'pen', col: COL.indigo, t: '손가락으로 쓰기', s: '쓰기 테스트 전에 소리만 듣고 써 봐요'});
     if (d.s1.rules) rows.push({icon: 'doc', col: COL.indigo, t: d.s1.rules === 'long' ? '장음, 촉음, ん' : '외래어 읽기', s: '듣고 가나로 받아 적어요'});
     if (bp && bp.ch && GRAMMAR[bp.ch]) rows.push({icon: 'doc', col: COL.indigo, t: '문법', s: grammarSet(bp.ch, bp.part).pts.map(p => esc(p.title)).join(', ')});
   }
@@ -2359,6 +2383,58 @@ function keypad(host, opt) {
   return {get value() { return st.v; }, lock() { host.classList.add('locked'); }};
 }
 
+/* ---------- handwriting: stroke-by-stroke check against KanjiVG ---------- */
+const DRAW_N = 24;
+function samplePath(svg, d, n = DRAW_N) {
+  const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  p.setAttribute('d', d); svg.appendChild(p);
+  const len = p.getTotalLength(), pts = [];
+  for (let i = 0; i < n; i++) { const q = p.getPointAtLength(len * i / (n - 1)); pts.push([q.x, q.y]); }
+  p.remove();
+  return {pts, len};
+}
+function resample(pts, n = DRAW_N) {
+  if (pts.length < 2) return Array.from({length: n}, () => pts[0] || [0, 0]);
+  const seg = [0];
+  for (let i = 1; i < pts.length; i++) seg.push(seg[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = seg[seg.length - 1] || 1, out = [];
+  let j = 1;
+  for (let i = 0; i < n; i++) {
+    const t = total * i / (n - 1);
+    while (j < seg.length - 1 && seg[j] < t) j++;
+    const a = pts[j - 1], b = pts[j], span = seg[j] - seg[j - 1] || 1, f = Math.min(1, Math.max(0, (t - seg[j - 1]) / span));
+    out.push([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]);
+  }
+  return out;
+}
+const meanDist = (a, b) => a.reduce((s, p, i) => s + Math.hypot(p[0] - b[i][0], p[1] - b[i][1]), 0) / a.length;
+function strokeOk(user, tpl) {
+  const u = resample(user), fwd = meanDist(u, tpl.pts), back = meanDist(u.slice().reverse(), tpl.pts);
+  const tol = tpl.len < 20 ? 14 : 18;
+  return fwd < tol && fwd <= back + 1.5 && Math.hypot(u[0][0] - tpl.pts[0][0], u[0][1] - tpl.pts[0][1]) < 26;
+}
+
+/* ---------- speech recognition (Chrome on Android uses Google's recognizer) ---------- */
+const SRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+const normJa = x => kataToHira(String(x)).replace(/[\s、。，．,.!?！？・「」〜~_ー]/g, '');
+function levRatio(a, b) {
+  if (!a.length || !b.length) return 0;
+  const d = Array.from({length: b.length + 1}, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) { let prev = d[0]; d[0] = i; for (let j = 1; j <= b.length; j++) { const t = d[j]; d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = t; } }
+  return 1 - d[b.length] / Math.max(a.length, b.length);
+}
+let SR_ON = null;
+function listenJa(onDone) {
+  if (SR_ON) { try { SR_ON.abort(); } catch (e) {} }
+  const r = new SRec(); SR_ON = r;
+  r.lang = 'ja-JP'; r.interimResults = false; r.maxAlternatives = 5;
+  let got = false;
+  r.onresult = e => { got = true; onDone({alts: [...e.results[0]].map(a => a.transcript)}); };
+  r.onerror = e => { got = true; onDone({error: e.error}); };
+  r.onend = () => { SR_ON = null; if (!got) onDone({error: 'no-speech'}); };
+  r.start();
+}
+
 /* ---------- renderers ---------- */
 function wireAudio(body, text, opt = {}) {
   const play = $('[data-play]', body), slow = $('[data-slow]', body);
@@ -2413,6 +2489,47 @@ const RENDER = {
       <ol class="steps mt16"><li>선생님이 읽을 때 같이 소리 내서 읽어요</li><li>책에 없는 설명은 교재 여백에 적어요</li><li>${tsOf(l.to)}에서 멈추고 아래 버튼을 눌러요</li></ol>`;
     $('[data-bookinstead]', body).addEventListener('click', () => { LESSON.q[LESSON.i] = exBook(ex.bp, 10); showEx(); });
     return {kind: 'intro', label: '다 봤어요'};
+  },
+  draw(ex, body, api) {
+    const k = ex.k, info = KANA_INFO[k], paths = STROKES[k];
+    body.innerHTML = `<h2 class="lp">${ex.recall ? `소리를 듣고 ${isKata(k) ? '가타카나' : '히라가나'}로 써요` : '획순대로 따라 써요'}</h2>
+      <div class="dq">${ex.recall ? '' : `<span class="dqk" lang="ja">${k}</span>`}<span class="dqh">${esc(info.hg)}</span><button class="spk" data-say="${k}" aria-label="듣기">${IC.spk}</button></div>
+      <div class="dpad"><svg viewBox="0 0 109 109" class="dsvg" role="img" aria-label="글자를 쓰는 칸"><g class="guide"><path d="M54.5 3v103M3 54.5h103"/></g>${ex.recall ? '' : `<g class="model">${paths.map(d => `<path d="${d}"/>`).join('')}</g>`}<g class="dok"></g><g class="hint"></g><polyline class="ink" points=""/></svg></div>
+      <div class="dbar"><span class="dcount">1 / ${paths.length}획</span><button class="btn grey sm" data-giveup>${ex.recall ? '모르겠어요' : '다음 획 보기'}</button></div>`;
+    wireAudio(body);
+    if (ex.recall) autoPlay(ex, k);
+    const svg = $('.dsvg', body), ink = $('.ink', svg), doneG = $('.dok', svg), hintG = $('.hint', svg), cnt = $('.dcount', body);
+    const tpls = paths.map(d => samplePath(svg, d));
+    let j = 0, miss = 0, missHere = 0, cur = null, finished = false;
+    const toLocal = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * 109, (e.clientY - r.top) / r.height * 109]; };
+    const hint = i => { hintG.innerHTML = `<path d="${paths[i]}"/><circle cx="${tpls[i].pts[0][0].toFixed(1)}" cy="${tpls[i].pts[0][1].toFixed(1)}" r="3.4"/>`; };
+    const end = gaveUp => {
+      finished = true; hintG.innerHTML = '';
+      const ok = !gaveUp && miss <= (ex.recall ? 1 : 2);
+      setTimeout(() => api.finish({ok, verdict: miss === 0 ? 'g' : ok ? 'o' : 'b', title: gaveUp ? '이렇게 써요' : miss === 0 ? '획순까지 맞게 썼어요' : ok ? `${miss}번 다시 썼어요` : '아직 손에 덜 익었어요', answer: ex.ansLabel, detail: ex.fb, say: k}), 300);
+    };
+    const advance = () => {
+      doneG.insertAdjacentHTML('beforeend', `<path d="${paths[j]}"/>`);
+      j++; missHere = 0; hintG.innerHTML = '';
+      if (j >= paths.length) end(false); else cnt.textContent = `${j + 1} / ${paths.length}획`;
+    };
+    svg.addEventListener('pointerdown', e => { if (finished || LESSON.phase !== 'ask') return; e.preventDefault(); try { svg.setPointerCapture(e.pointerId); } catch (x) {} cur = [toLocal(e)]; });
+    svg.addEventListener('pointermove', e => { if (!cur) return; cur.push(toLocal(e)); ink.setAttribute('points', cur.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')); });
+    svg.addEventListener('pointerup', () => {
+      if (!cur) return;
+      const pts = cur; cur = null; ink.setAttribute('points', '');
+      if (strokeOk(pts, tpls[j])) { haptic(8); advance(); return; }
+      miss++; missHere++; sfx('bad'); haptic(25); hint(j);
+      if (missHere >= 3) setTimeout(advance, 500);
+    });
+    svg.addEventListener('pointercancel', () => { cur = null; ink.setAttribute('points', ''); });
+    $('[data-giveup]', body).addEventListener('click', () => {
+      if (finished) return;
+      if (!ex.recall) { hint(j); return; }
+      doneG.innerHTML = paths.map(d => `<path d="${d}"/>`).join('');
+      end(true);
+    });
+    return 'auto';
   },
   introKana(ex, body) {
     const k = KANA_INFO[ex.k];
@@ -2548,6 +2665,7 @@ const RENDER = {
     const rec = canRecord();
     body.innerHTML = `<h2 class="lp">소리 내서 말해 봐요</h2><div class="lq"><div class="qko">${esc(ko)}</div></div>
       ${rec ? `<div class="recbox"><button class="mic" data-rec aria-label="녹음">${IC.mic}</button><span class="recst tiny">녹음 버튼을 누르고 말한 다음 다시 눌러요</span></div>` : '<p class="lhint">입으로 다 말한 다음 정답을 확인해요</p>'}
+      ${SRec ? `<div class="srbox"><button class="btn soft sm" data-sr>${IC.ear} 알아듣는지 확인</button><p class="srout tiny" aria-live="polite"></p></div>` : ''}
       <div class="reveal" hidden><div class="phcard"><div class="pjp" lang="ja">${esc(jp)}</div><span class="hg">${esc(toHangul(read))}</span>${p && p.c ? `<div class="pcas"><span class="tag cas">친구끼리</span><span lang="ja">${esc(p.c)}</span></div>` : ''}
         <div class="cmpbtns"><button class="btn soft sm" data-say="${esc(read)}">${IC.spk} 원래 발음</button>${rec ? `<button class="btn grey sm" data-mine hidden>${IC.play} 내 목소리</button>` : ''}</div></div>
         <p class="lhint" data-cmp></p></div>`;
@@ -2562,6 +2680,17 @@ const RENDER = {
       } catch (e) { stEl.textContent = '마이크를 쓸 수 없어요. 소리 내서 말한 다음 정답을 봐요'; mic.disabled = true; }
     });
     if (mine) mine.addEventListener('click', playMine);
+    const srb = $('[data-sr]', body), sro = $('.srout', body);
+    if (srb) srb.addEventListener('click', () => {
+      if (REC.mr) recStop();
+      stopSpeech(); srb.disabled = true; sro.textContent = '듣고 있어요. 일본어로 말해 봐요';
+      listenJa(res => {
+        srb.disabled = false;
+        if (res.error) { sro.textContent = res.error === 'not-allowed' || res.error === 'service-not-allowed' ? '마이크 권한이 필요해요' : res.error === 'no-speech' ? '소리가 안 들렸어요. 다시 해 봐요' : '지금은 음성 인식을 쓸 수 없어요'; return; }
+        const target = normJa(clean(read)), best = Math.max(...res.alts.map(a => levRatio(normJa(a), target)));
+        sro.innerHTML = `이렇게 들렸어요: <b lang="ja">${esc(res.alts[0])}</b><br>${best >= .85 ? '목표 문장과 거의 똑같이 들렸어요' : best >= .6 ? '비슷해요. 정답을 보고 다른 곳을 찾아봐요' : '다르게 들렸어요. 한자로 바뀌어 나왔다면 맞았을 수도 있어요'}`;
+      });
+    });
     api.setCheck(() => { recStop(); $('[data-cmp]', body).textContent = REC.url ? '두 소리를 번갈아 들어 보고, 맞게 말했는지 골라요' : '원래 발음을 듣고, 내가 말한 소리와 같았는지 골라요'; $('.reveal', body).hidden = false; const rb = $('.recbox', body); if (rb) rb.hidden = true; setTimeout(() => speak(read), 200); return {selfRate: true}; });
     return 'speak';
   },
@@ -2680,7 +2809,7 @@ function worksheetFor(i) {
   if (!d.test) {
     if (d.s1.kana) {
       const kanaList = d.s1.kana.every(k => YOON_ALL.includes(k) || DAKU_ALL.includes(k)) ? spick(d.s1.kana, 10, r) : d.s1.kana;
-      sec.push({kind: 'trace', title: '따라 쓰기', note: '회색 글자를 덧쓰고 나머지 칸은 혼자 써요. 쓸 때마다 소리 내서 읽어요.', items: kanaList});
+      sec.push({kind: 'trace', title: '따라 쓰기', note: '회색 글자를 덧쓰고, 다음 세 칸은 보고 써요. 회색 바탕 세 칸은 왼쪽을 손으로 가리고 떠올려서 써요. 쓸 때마다 소리 내서 읽어요.', items: kanaList});
       sec.push({kind: 'dict', title: '받아쓰기', note: '앱 숙제 화면에서 받아쓰기를 틀고 들리는 글자를 적어요.', items: spick([...d.s1.kana, ...spick(known.filter(k => !d.s1.kana.includes(k)), 3, r)], 8, r).map(k => ({play: k, ans: k}))});
     }
     if (d.s1.drill) sec.push({kind: 'table', title: '히라가나 50음도', note: '칸 구석의 한글 발음을 보고 글자를 적어요.', set: 'hira'});
@@ -2721,7 +2850,7 @@ const dictItems = ws => ws.sec.filter(s => s.kind === 'dict').flatMap(s => s.ite
 
 /* ---------- printable HTML ---------- */
 function traceRow(k) {
-  return `<div class="wtr"><div class="wm"><span lang="ja">${k}</span>${STROKES[k] ? strokeSVG(k, 'ws') : ''}</div><div class="wc g"><span lang="ja">${k}</span></div><div class="wc g2"><span lang="ja">${k}</span></div>${'<div class="wc"></div>'.repeat(6)}</div>`;
+  return `<div class="wtr"><div class="wm"><span lang="ja">${k}</span>${STROKES[k] ? strokeSVG(k, 'ws') : ''}</div><div class="wc g"><span lang="ja">${k}</span></div><div class="wc g2"><span lang="ja">${k}</span></div>${'<div class="wc"></div>'.repeat(3)}${'<div class="wc hide"></div>'.repeat(3)}</div>`;
 }
 function tableHTML(set) {
   const rows = set === 'kata' ? KATA_ROWS : HIRA_ROWS;
